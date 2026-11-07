@@ -27,7 +27,7 @@ gradle.settingsEvaluated {
     dependencyResolutionManagement.repositories { kobwebSnapshots() }
 }
 
-rootProject.name = "todo"
+rootProject.name = "kmp-wizard"
 
 include(":site")
 

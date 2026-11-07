@@ -1,4 +1,4 @@
-package todo
+package kmpwizard
 
 import androidx.compose.runtime.Composable
 import com.varabyte.kobweb.compose.ui.Modifier

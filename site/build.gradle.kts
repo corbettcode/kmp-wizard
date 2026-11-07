@@ -7,21 +7,8 @@ plugins {
     alias(libs.plugins.kobweb.application)
 }
 
-group = "todo"
+group = "kmpwizard"
 version = "1.0-SNAPSHOT"
-
-kobweb {
-    app {
-        server {
-            systemProperties.put("todo.datastore.impl",
-                // Uncomment only one.
-                // See README for how to make the MongoDB approach work.
-                "InMemory",
-//                "MongoDb",
-            )
-        }
-    }
-}
 
 kotlin {
     configAsKobwebApplication(includeServer = true)
@@ -40,7 +27,6 @@ kotlin {
 
         jvmMain.dependencies {
             compileOnly(libs.kobweb.api) // Provided by Kobweb backend at runtime
-            implementation(libs.ktmongo.coroutines)
         }
     }
 }
