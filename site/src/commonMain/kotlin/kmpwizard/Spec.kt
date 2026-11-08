@@ -8,18 +8,18 @@ enum class Target(val label: String) {
 }
 
 @Serializable
-data class ProjectSpec(
-    val name: String,
-    val packageName: String,
-    val targets: Set<Target>,
-    val slices: List<String>,
-    val libraries: Set<String>,
+data class ProjectSpecification(
+    val name: String
+    , val packageName: String
+    , val targets: Set<Target>
+    , val slices: List<String>
+    , val libraries: Set<String>
     /** Adds a sample `todo` slice: REST API on the server backed by MongoDB, clients call it over HTTP. */
-    val sampleTodo: Boolean = false,
+    , val sampleTodo: Boolean = false
     /** Ship the project as a local git repository (`.git` included in the ZIP, branch `main`). */
-    val gitInit: Boolean = false,
+    , val gitInit: Boolean = false
     /** When [gitInit] is on: commit all files with this message. Blank = init only, nothing committed. */
-    val commitMessage: String = "",
+    , val commitMessage: String = ""
 )
 
 /** Slice name used by the Todo sample. */
@@ -61,7 +61,7 @@ object Catalog {
         "for", "while", "do", "try", "package", "interface", "return", "typealias",
     )
 
-    fun validate(spec: ProjectSpec): List<String> = buildList {
+    fun validate(spec: ProjectSpecification): List<String> = buildList {
         if (spec.name.isBlank() || spec.slug().isEmpty()) add("Project name is required.")
         if (!Regex("^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$").matches(spec.packageName))
             add("Package must look like com.example.app (lowercase letters/digits).")
@@ -84,5 +84,5 @@ object Catalog {
     }
 }
 
-fun ProjectSpec.slug(): String = name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
-fun ProjectSpec.validate(): List<String> = Catalog.validate(this)
+fun ProjectSpecification.slug(): String = name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+fun ProjectSpecification.validate(): List<String> = Catalog.validate(this)

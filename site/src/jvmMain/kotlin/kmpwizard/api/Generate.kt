@@ -6,7 +6,7 @@ import com.varabyte.kobweb.api.http.HttpMethod
 import com.varabyte.kobweb.api.http.bodyOf
 import com.varabyte.kobweb.api.http.text
 import kmpwizard.generator.ProjectGenerator
-import kmpwizard.ProjectSpec
+import kmpwizard.ProjectSpecification
 import kmpwizard.validate
 import kotlinx.serialization.json.Json
 
@@ -20,7 +20,7 @@ suspend fun generate(ctx: ApiContext) {
         return
     }
     val spec = try {
-        json.decodeFromString<ProjectSpec>(ctx.req.body!!.text())
+        json.decodeFromString<ProjectSpecification>(ctx.req.body!!.text())
     } catch (e: Exception) {
         ctx.res.status = 400
         ctx.res.body = bodyOf("Malformed request")

@@ -22,7 +22,6 @@ import kmpwizard.*
 import kotlinx.browser.document
 import kotlinx.browser.window
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.LineStyle
@@ -56,7 +55,7 @@ fun HomePage() {
     val scope = rememberCoroutineScope()
 
     // Drop libraries that became unavailable when platforms changed (e.g. Occurrent).
-    val spec = ProjectSpec(
+    val spec = ProjectSpecification(
         name,
         pkg,
         targets,

@@ -1,6 +1,6 @@
 package kmpwizard.generator
 
-import kmpwizard.ProjectSpec
+import kmpwizard.ProjectSpecification
 import kmpwizard.TODO_LIBRARIES
 import kmpwizard.TODO_SLICE
 import kmpwizard.Target
@@ -257,7 +257,7 @@ private val setTargets = mapOf(
     "webMain" to setOf(Target.WEB),
 )
 
-private class Ctx(val spec: ProjectSpec) {
+private class ProjectContext(val spec: ProjectSpecification) {
     val pkg = spec.packageName
     val dir = pkg.replace('.', '/')
     /** Platform entry points live in `<pkg>.app.<platform>`. */
@@ -286,8 +286,8 @@ private class Ctx(val spec: ProjectSpec) {
 }
 
 class ProjectGenerator {
-    fun generate(spec: ProjectSpec): ByteArray {
-        val c = Ctx(spec)
+    fun generate(spec: ProjectSpecification): ByteArray {
+        val c = ProjectContext(spec)
         val files = linkedMapOf<String, String>()
         rootFiles(c, files)
         coreModule(c, files)
@@ -364,7 +364,7 @@ class ProjectGenerator {
 
     // ---------- root ----------
 
-    private fun rootFiles(c: Ctx, f: MutableMap<String, String>) {
+    private fun rootFiles(c: ProjectContext, f: MutableMap<String, String>) {
         val mods = buildList {
             add(":core")
             if (c.hasUi) add(":app:sharedUI")
@@ -446,7 +446,7 @@ class ProjectGenerator {
     }
 
     /** Each section's entries are sorted by key. */
-    private fun versionCatalog(c: Ctx) = buildString {
+    private fun versionCatalog(c: ProjectContext) = buildString {
         val v = sortedMapOf("kotlin" to KOTLIN, "coroutines" to COROUTINES)
         if (c.hasUi) {
             v["compose"] = COMPOSE
@@ -517,7 +517,7 @@ class ProjectGenerator {
     // ---------- KMP library build script (core and app/sharedUI) ----------
 
     private fun kmpBuildScript(
-        c: Ctx,
+        c: ProjectContext,
         namespace: String,
         compose: Boolean,
         jvm: Boolean,
@@ -577,7 +577,7 @@ class ProjectGenerator {
 
     // ---------- core: shared by clients and server. Each slice's domain + data, no UI ----------
 
-    private fun coreModule(c: Ctx, f: MutableMap<String, String>) {
+    private fun coreModule(c: ProjectContext, f: MutableMap<String, String>) {
         val deps = linkedMapOf<String, MutableList<String>>()
         fun add(set: String, d: String) = deps.getOrPut(set) { mutableListOf() }.add(d)
         add("commonMain", "api(libs.coroutines.core)")
@@ -625,7 +625,7 @@ class ProjectGenerator {
 
     // ---------- app/sharedUI: Compose shell + each slice's presentation ----------
 
-    private fun sharedUiModule(c: Ctx, f: MutableMap<String, String>) {
+    private fun sharedUiModule(c: ProjectContext, f: MutableMap<String, String>) {
         val deps = linkedMapOf(
             "commonMain" to listOf(
                 "api(projects.core)",
@@ -704,7 +704,7 @@ class ProjectGenerator {
 
     // ---------- one vertical slice: domain + data in core, presentation in app/sharedUI ----------
 
-    private fun slice(c: Ctx, s: String, f: MutableMap<String, String>) {
+    private fun slice(c: ProjectContext, s: String, f: MutableMap<String, String>) {
         val x = s.replaceFirstChar(Char::uppercase)
         val p = "${c.pkg}.features.$s"
         val b = "core/src/commonMain/kotlin/${c.dir}/features/$s"
@@ -826,7 +826,7 @@ class ProjectGenerator {
 
     // ---------- app/: platform entry points ----------
 
-    private fun androidApp(c: Ctx, f: MutableMap<String, String>) {
+    private fun androidApp(c: ProjectContext, f: MutableMap<String, String>) {
         f["app/androidApp/build.gradle.kts"] = """
             plugins {
                 alias(libs.plugins.androidApplication)
@@ -885,7 +885,7 @@ class ProjectGenerator {
         """.trimIndent()
     }
 
-    private fun desktopApp(c: Ctx, f: MutableMap<String, String>) {
+    private fun desktopApp(c: ProjectContext, f: MutableMap<String, String>) {
         f["app/desktopApp/build.gradle.kts"] = """
             import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
@@ -925,7 +925,7 @@ class ProjectGenerator {
         """.trimIndent()
     }
 
-    private fun webApp(c: Ctx, f: MutableMap<String, String>) {
+    private fun webApp(c: ProjectContext, f: MutableMap<String, String>) {
         f["app/webApp/build.gradle.kts"] = """
             import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
@@ -974,7 +974,7 @@ class ProjectGenerator {
         """.trimIndent()
     }
 
-    private fun iosApp(c: Ctx, f: MutableMap<String, String>) {
+    private fun iosApp(c: ProjectContext, f: MutableMap<String, String>) {
         f["app/iosApp/iosApp/iOSApp.swift"] = """
             import SwiftUI
 
@@ -1013,7 +1013,7 @@ class ProjectGenerator {
 
     // ---------- server: Ktor app reusing each slice's domain + data from core ----------
 
-    private fun server(c: Ctx, f: MutableMap<String, String>) {
+    private fun server(c: ProjectContext, f: MutableMap<String, String>) {
         val sp = c.appPkg("server")
         val sd = c.appDir("server")
         val slices = c.spec.slices.map { it to it.replaceFirstChar(Char::uppercase) }
@@ -1179,12 +1179,12 @@ class ProjectGenerator {
     // ---------- Todo sample: clients -> HTTP -> server -> MongoDB, sharing domain + DTOs via core ----------
 
     /** Result type the Todo use cases return, depending on whether Arrow is selected. */
-    private fun todoResult(c: Ctx, t: String) = if (c.lib("arrow")) "Either<DomainError, $t>" else "Result<$t>"
+    private fun todoResult(c: ProjectContext, t: String) = if (c.lib("arrow")) "Either<DomainError, $t>" else "Result<$t>"
 
-    private fun todoResultImports(c: Ctx) =
+    private fun todoResultImports(c: ProjectContext) =
         if (c.lib("arrow")) "import arrow.core.Either\nimport ${c.pkg}.core.DomainError\n" else ""
 
-    private fun todoSample(c: Ctx, f: MutableMap<String, String>) {
+    private fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
         val s = TODO_SLICE
         val p = "${c.pkg}.features.$s"
         val b = "core/src/commonMain/kotlin/${c.dir}/features/$s"
@@ -1549,7 +1549,7 @@ class ProjectGenerator {
     }
 
     /** Server side of the Todo sample: MongoDB adapter + HTTP routes. */
-    private fun todoServer(c: Ctx, f: MutableMap<String, String>) {
+    private fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
         val s = TODO_SLICE
         val p = "${c.pkg}.features.$s"
         val tp = "${c.appPkg("server")}.$s"
@@ -1671,7 +1671,7 @@ class ProjectGenerator {
             .replace("__RESPOND_ERROR__", respondError) + "\n"
     }
 
-    private fun readme(c: Ctx) = buildString {
+    private fun readme(c: ProjectContext) = buildString {
         appendLine("# ${c.spec.name}")
         appendLine("Generated Kotlin Multiplatform project${if (c.hasUi) " (Compose Multiplatform UI)" else ""}.\n")
         appendLine("Targets: ${c.spec.targets.joinToString { it.label }}")
