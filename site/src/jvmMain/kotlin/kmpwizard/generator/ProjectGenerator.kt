@@ -5,9 +5,14 @@ import kmpwizard.TODO_LIBRARIES
 import kmpwizard.TODO_SLICE
 import kmpwizard.Target
 import kmpwizard.slug
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream
+import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.lib.PersonIdent
 import java.io.ByteArrayOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
+import kotlin.io.path.*
 
 /*
  * Generated project layout follows
@@ -20,6 +25,8 @@ import java.util.zip.ZipOutputStream
  */
 
 // Pinned versions of the GENERATED project. Bump these in one place.
+// When bumping GRADLE, refresh the wrapper files in resources/kmpwizard/wrapper/ too
+// (run `./gradlew wrapper --gradle-version <new>` in this repo, then copy gradlew, gradlew.bat, gradle-wrapper.jar).
 private const val GRADLE = "9.9.0"
 private const val KOTLIN = "2.4.21"
 private const val AGP = "9.1.1"
@@ -30,13 +37,23 @@ private const val COROUTINES = "1.11.0"
 private const val ACTIVITY = "1.13.0"
 private const val COMPOSE_MATERIAL3 = "1.9.0"
 // Compose 1.12 Android artifacts require compileSdk 37.
-private const val COMPILE_SDK = 36
+private const val COMPILE_SDK = 37
 private const val TARGET_SDK = 36
 private const val MIN_SDK = 24
 private const val SERVER_PORT = 8081
 private const val MONGODB = "5.14.0"
 /** Name Swift code imports; matches the framework baseName, not the module name. */
 private const val IOS_FRAMEWORK = "sharedUI"
+/** Identity on the optional initial commit; the server has no idea who the user is. */
+private const val GIT_AUTHOR_NAME = "KMP Wizard"
+private const val GIT_AUTHOR_EMAIL = "kmp-wizard@localhost"
+/** Wrapper files copied verbatim from resources, keyed by their path in the generated project. */
+private val WRAPPER_FILES = mapOf(
+    "gradlew" to "gradlew",
+    "gradlew.bat" to "gradlew.bat",
+    "gradle/wrapper/gradle-wrapper.jar" to "gradle-wrapper.jar",
+)
+private val EXECUTABLES = setOf("gradlew")
 
 /** [api] = true when the library's types appear in core's public API (e.g. use case return types). */
 private class Art(val alias: String, val module: String, val sets: List<String>, val api: Boolean = false)
@@ -144,16 +161,64 @@ class ProjectGenerator {
         if (c.has(Target.WEB)) webApp(c, files)
         if (c.has(Target.IOS)) iosApp(c, files)
         if (c.has(Target.SERVER)) server(c, files)
-        return zip(c.slug, files)
+        val all = files.mapValues { it.value.toByteArray() } + wrapperFiles()
+        val entries = if (spec.gitInit) withGitRepo(all, spec.commitMessage.trim()) else all
+        return zip(c.slug, entries)
     }
 
-    private fun zip(root: String, files: Map<String, String>): ByteArray {
-        val bos = ByteArrayOutputStream()
-        ZipOutputStream(bos).use { z ->
+    private fun wrapperFiles(): Map<String, ByteArray> = WRAPPER_FILES.mapValues { (_, name) ->
+        val res = "/kmpwizard/wrapper/$name"
+        ProjectGenerator::class.java.getResourceAsStream(res)?.use { it.readBytes() }
+            ?: error("Missing resource $res")
+    }
+
+    /**
+     * Writes the files to a temp dir, runs `git init` (branch `main`) and, if [message] is not blank,
+     * commits everything. Returns everything in the dir, `.git/` included, keyed by relative path.
+     * Directories map to null: git needs its empty ones (e.g. `.git/objects/`) to recognise the repo.
+     */
+    @OptIn(ExperimentalPathApi::class)
+    private fun withGitRepo(files: Map<String, ByteArray>, message: String): Map<String, ByteArray?> {
+        val dir = Files.createTempDirectory("kmp-wizard-")
+        try {
             files.forEach { (path, content) ->
-                z.putNextEntry(ZipEntry("$root/$path"))
-                z.write(content.toByteArray())
-                z.closeEntry()
+                val file = dir.resolve(path).apply { parent.createDirectories() }
+                file.writeBytes(content)
+                // Git records the executable bit from the file system.
+                if (path in EXECUTABLES) runCatching { file.setPosixFilePermissions(PosixFilePermissions.fromString("rwxr-xr-x")) }
+            }
+            Git.init().setDirectory(dir.toFile()).setInitialBranch("main").call().use { git ->
+                if (message.isNotEmpty()) {
+                    git.add().addFilepattern(".").call()
+                    val who = PersonIdent(GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL)
+                    git.commit().setMessage(message).setAuthor(who).setCommitter(who).setSign(false).call()
+                }
+            }
+            return dir.walk(PathWalkOption.INCLUDE_DIRECTORIES).filter { it != dir }
+                .map { it.relativeTo(dir).invariantSeparatorsPathString to it }.sortedBy { it.first }
+                .associate { (rel, p) -> if (p.isDirectory()) "$rel/" to null else rel to p.readBytes() }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    /**
+     * [files] maps relative paths to contents; a null value is a directory (path ending in `/`).
+     * Entries carry Unix modes so [EXECUTABLES] (e.g. `gradlew`) stay executable when unzipped.
+     */
+    private fun zip(root: String, files: Map<String, ByteArray?>): ByteArray {
+        val bos = ByteArrayOutputStream()
+        ZipArchiveOutputStream(bos).use { z ->
+            files.forEach { (path, content) ->
+                val entry = ZipArchiveEntry("$root/$path")
+                entry.unixMode = when {
+                    content == null -> "40755".toInt(8)
+                    path in EXECUTABLES -> "100755".toInt(8)
+                    else -> "100644".toInt(8)
+                }
+                z.putArchiveEntry(entry)
+                content?.let(z::write)
+                z.closeArchiveEntry()
             }
         }
         return bos.toByteArray()
@@ -213,8 +278,18 @@ class ProjectGenerator {
             android.nonTransitiveRClass=true
         """.trimIndent()
         f["gradle/wrapper/gradle-wrapper.properties"] = """
+            distributionBase=GRADLE_USER_HOME
+            distributionPath=wrapper/dists
             distributionUrl=https\://services.gradle.org/distributions/gradle-$GRADLE-bin.zip
-        """.trimIndent()
+            networkTimeout=10000
+            retries=0
+            retryBackOffMs=500
+            validateDistributionUrl=true
+            zipStoreBase=GRADLE_USER_HOME
+            zipStorePath=wrapper/dists
+        """.trimIndent() + "\n"
+        // Same line-ending rules `gradle init` writes, so gradlew.bat keeps CRLF and the jar isn't mangled.
+        f[".gitattributes"] = "gradlew text eol=lf\n*.bat text eol=crlf\n*.jar binary\n"
         if (c.todo) f["docker-compose.yml"] = """
             # Local MongoDB for the Todo sample: docker compose up -d
             services:
@@ -1455,7 +1530,7 @@ class ProjectGenerator {
         appendLine("Targets: ${c.spec.targets.joinToString { it.label }}")
         appendLine("Libraries: ${c.libIds.sorted().joinToString().ifEmpty { "none" }}\n")
         appendLine("## Setup")
-        appendLine("This ZIP has no Gradle wrapper jar. With Gradle installed, run `gradle wrapper --gradle-version $GRADLE` once.\n")
+        appendLine("Includes the Gradle $GRADLE wrapper: run `./gradlew` (or `gradlew.bat` on Windows); no Gradle install needed.\n")
         appendLine("## Structure")
         appendLine("Follows the [recommended KMP project structure](https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html):")
         appendLine("entry points are separate modules, shared code is split into logic and UI.\n")

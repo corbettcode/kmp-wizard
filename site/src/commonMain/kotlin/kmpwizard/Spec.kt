@@ -16,6 +16,10 @@ data class ProjectSpec(
     val libraries: Set<String>,
     /** Adds a sample `todo` slice: REST API on the server backed by MongoDB, clients call it over HTTP. */
     val sampleTodo: Boolean = false,
+    /** Ship the project as a local git repository (`.git` included in the ZIP, branch `main`). */
+    val gitInit: Boolean = false,
+    /** When [gitInit] is on: commit all files with this message. Blank = init only, nothing committed. */
+    val commitMessage: String = "",
 )
 
 /** Slice name used by the Todo sample. */

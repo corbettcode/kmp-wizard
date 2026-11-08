@@ -27,6 +27,8 @@ kotlin {
 
         jvmMain.dependencies {
             compileOnly(libs.kobweb.api) // Provided by Kobweb backend at runtime
+            implementation(libs.jgit) // Builds the optional git repo inside generated projects
+            implementation(libs.commons.compress) // ZIP entries with Unix modes, so gradlew stays executable
         }
     }
 }

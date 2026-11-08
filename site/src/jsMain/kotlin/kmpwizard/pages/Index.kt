@@ -33,7 +33,7 @@ import org.w3c.dom.HTMLAnchorElement
 import org.w3c.dom.url.URL
 import org.w3c.files.Blob
 import org.w3c.files.BlobPropertyBag
-private val steps = listOf("Project", "Platforms", "Slices", "Libraries", "Review")
+private val steps = listOf("Project", "Platforms", "Slices", "Libraries", "Git", "Review")
 
 @Page
 @Composable
@@ -46,6 +46,8 @@ fun HomePage() {
     var newSlice by remember { mutableStateOf("") }
     var libs by remember { mutableStateOf(setOf("kotest", "kermit")) }
     var sampleTodo by remember { mutableStateOf(false) }
+    var gitInit by remember { mutableStateOf(false) }
+    var commitMessage by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -59,6 +61,8 @@ fun HomePage() {
         libs.filter { Catalog.byId[it]?.isAvailable(targets) == true }
             .toSet(),
         sampleTodo = sampleTodo && Target.SERVER in targets,
+        gitInit = gitInit,
+        commitMessage = if (gitInit) commitMessage.trim() else "",
     )
     val errors = spec.validate()
 
@@ -141,6 +145,27 @@ fun HomePage() {
                         }
                     }
                 }
+                4 -> {
+                    H3 { Text("Git repository (optional)") }
+                    Checkbox(gitInit, onCheckedChange = { gitInit = it }) {
+                        SpanText("Set up a local git repository (branch 'main')")
+                    }
+                    if (gitInit) {
+                        Column(Modifier.gap(0.25.cssRem)) {
+                            SpanText("Initial commit message (optional)", Modifier.fontWeight(FontWeight.SemiBold))
+                            Input(
+                                InputType.Text, value = commitMessage, onValueChange = { commitMessage = it },
+                                modifier = Modifier.fillMaxWidth(), placeholder = "e.g. Initial commit",
+                            )
+                        }
+                        SpanText(
+                            "With a message, all files are committed as \"KMP Wizard\" (amend with " +
+                                "git commit --amend --reset-author to make it yours). Leave it empty to only " +
+                                "initialize the repository and make the first commit yourself.",
+                            Modifier.opacity(0.7)
+                        )
+                    }
+                }
                 else -> {
                     H3 { Text("Review") }
                     SpanText("${spec.name} (${spec.packageName})")
@@ -148,6 +173,13 @@ fun HomePage() {
                     SpanText("Slices: ${spec.slices.joinToString().ifEmpty { "none" }}")
                     SpanText("Todo sample (MongoDB): ${if (spec.sampleTodo) "yes" else "no"}")
                     SpanText("Libraries: ${spec.libraries.joinToString().ifEmpty { "none" }}")
+                    SpanText(
+                        "Git: " + when {
+                            !spec.gitInit -> "no"
+                            spec.commitMessage.isEmpty() -> "initialize repository, no commit"
+                            else -> "initialize repository and commit \"${spec.commitMessage}\""
+                        }
+                    )
                     errors.forEach { SpanText("⚠ $it", Modifier.color(Colors.Red)) }
                     status?.let { SpanText(it) }
                 }
