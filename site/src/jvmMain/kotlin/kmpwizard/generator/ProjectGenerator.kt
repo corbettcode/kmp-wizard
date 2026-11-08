@@ -36,6 +36,7 @@ private const val LOGBACK = "1.6.6"
 private const val COROUTINES = "1.11.0"
 private const val ACTIVITY = "1.13.0"
 private const val COMPOSE_MATERIAL3 = "1.9.0"
+private const val KOIN = "4.2.2"
 // Compose 1.12 Android artifacts require compileSdk 37.
 private const val COMPILE_SDK = 37
 private const val TARGET_SDK = 36
@@ -58,50 +59,187 @@ private val EXECUTABLES = setOf("gradlew")
 /** [api] = true when the library's types appear in core's public API (e.g. use case return types). */
 private class Art(val alias: String, val module: String, val sets: List<String>, val api: Boolean = false)
 private class Plug(val alias: String, val id: String, val versionRef: String)
-private class Lib(
-    val versionKey: String,
-    val version: String,
-    val arts: List<Art>,
-    val plugins: List<Plug> = emptyList(),
+
+/**
+ * Describes a library entry used to group related dependency artifacts, plugin definitions,
+ * and version references under a shared library version.
+ */
+private class Library(
+    val versionKey: String
+    , val version: String
+    , val arts: List<Art>
+    , val plugins: List<Plug> = emptyList()
     /** Versions the plugins need besides [versionKey]. */
-    val extraVersions: Map<String, String> = emptyMap(),
+    , val extraVersions: Map<String, String> = emptyMap()
 )
 
 private val wiring = mapOf(
-    "kermit" to Lib("kermit", "2.2.0", listOf(Art("kermit", "co.touchlab:kermit", listOf("commonMain")))),
-    "arrow" to Lib("arrow", "2.3.0.1", listOf(Art("arrow-core", "io.arrow-kt:arrow-core", listOf("commonMain"), api = true))),
+    "arrow" to Library(
+        "arrow"
+        , "2.3.0.1"
+        , listOf(Art(
+            "arrow-core"
+            , "io.arrow-kt:arrow-core"
+            , listOf(
+                "commonMain"
+            )
+            , api = true
+        ) )
+    )
+
+    , "datetime" to Library(
+        "datetime"
+        , "0.8.0"
+        , listOf(Art(
+            "datetime"
+            , "org.jetbrains.kotlinx:kotlinx-datetime"
+            , listOf(
+                "commonMain"
+            )
+        ))
+    )
+
+    , "kermit" to Library(
+        "kermit"
+        , "2.2.0"
+        , listOf(
+            Art(
+                "kermit"
+                , "co.touchlab:kermit"
+                , listOf("commonMain")
+            )
+        )
+    )
+
     // Kotest 6: the `io.kotest` plugin plus KSP discover specs on non-JVM targets; JVM runs on JUnit Platform.
-    "kotest" to Lib(
-        "kotest", "6.2.6",
-        listOf(
-            Art("kotest-assertions", "io.kotest:kotest-assertions-core", listOf("commonTest")),
-            Art("kotest-engine", "io.kotest:kotest-framework-engine", listOf("commonTest")),
-            Art("kotest-runner", "io.kotest:kotest-runner-junit5", listOf("jvmTest")),
-        ),
-        plugins = listOf(Plug("kotest", "io.kotest", "kotest"), Plug("ksp", "com.google.devtools.ksp", "ksp")),
-        extraVersions = mapOf("ksp" to "2.3.13"),
-    ),
-    "turbine" to Lib("turbine", "1.2.1", listOf(Art("turbine", "app.cash.turbine:turbine", listOf("commonTest")))),
-    "ktor" to Lib(
-        "ktor", KTOR,
-        listOf(
-            Art("ktor-client-core", "io.ktor:ktor-client-core", listOf("commonMain")),
-            Art("ktor-client-okhttp", "io.ktor:ktor-client-okhttp", listOf("androidMain", "jvmMain")),
-            Art("ktor-client-darwin", "io.ktor:ktor-client-darwin", listOf("iosMain")),
-            Art("ktor-client-js", "io.ktor:ktor-client-js", listOf("webMain")),
-        ),
-    ),
-    "serialization" to Lib(
-        "serialization", "1.12.0",
-        listOf(Art("serialization-json", "org.jetbrains.kotlinx:kotlinx-serialization-json", listOf("commonMain"))),
-        plugins = listOf(Plug("kotlinSerialization", "org.jetbrains.kotlin.plugin.serialization", "kotlin")),
-    ),
-    "datetime" to Lib("datetime", "0.8.0", listOf(Art("datetime", "org.jetbrains.kotlinx:kotlinx-datetime", listOf("commonMain")))),
+    // Koin: core gets koin-core (+ koin-android); the Compose artifacts go in app/sharedUI (see sharedUiModule).
+    // Arts with no source sets are catalog-only.
+    , "koin" to Library(
+        "koin"
+        , KOIN
+        , listOf(
+            Art("koin-android", "io.insert-koin:koin-android", listOf("androidMain"))
+            , Art("koin-compose", "io.insert-koin:koin-compose", emptyList())
+            , Art("koin-composeNavigation3", "io.insert-koin:koin-compose-navigation3", emptyList())
+            , Art("koin-composeViewmodel", "io.insert-koin:koin-compose-viewmodel", emptyList())
+            , Art("koin-core", "io.insert-koin:koin-core", listOf("commonMain"), api = true)
+            , Art("koin-coreViewmodel", "io.insert-koin:koin-core-viewmodel", emptyList())
+        )
+    )
+
+    , "kotest" to Library(
+        "kotest"
+        , "6.2.6"
+        , listOf(
+            Art(
+                "kotest-assertions"
+                , "io.kotest:kotest-assertions-core"
+                , listOf(
+                    "commonTest"
+                )
+            )
+            , Art(
+                "kotest-engine"
+                , "io.kotest:kotest-framework-engine"
+                , listOf(
+                    "commonTest"
+                )
+            )
+            , Art(
+                "kotest-runner"
+                , "io.kotest:kotest-runner-junit5"
+                , listOf(
+                    "jvmTest"
+                )
+            )
+        )
+        , plugins = listOf(Plug("kotest", "io.kotest", "kotest"), Plug("ksp", "com.google.devtools.ksp", "ksp"))
+        , extraVersions = mapOf("ksp" to "2.3.13")
+    )
+
+    , "ktor" to Library(
+        "ktor"
+        , KTOR
+        , listOf(
+            Art(
+                "ktor-client-core"
+                , "io.ktor:ktor-client-core"
+                , listOf(
+                    "commonMain"
+                )
+            )
+            , Art(
+                "ktor-client-okhttp"
+                , "io.ktor:ktor-client-okhttp"
+                , listOf(
+                    "androidMain"
+                    , "jvmMain"
+                )
+            )
+            , Art(
+                "ktor-client-darwin"
+                , "io.ktor:ktor-client-darwin"
+                , listOf(
+                    "iosMain"
+                )
+            )
+            , Art(
+                "ktor-client-js"
+                , "io.ktor:ktor-client-js"
+                , listOf(
+                    "webMain"
+                )
+            )
+        )
+    )
+
     // Occurrent publishes JVM artifacts only.
-    "occurrent" to Lib(
-        "occurrent", "0.20.5",
-        listOf(Art("occurrent-eventstore-inmemory", "org.occurrent:eventstore-inmemory", listOf("androidMain", "jvmMain"))),
-    ),
+    , "occurrent" to Library(
+        "occurrent"
+        , "0.20.5"
+        , listOf(
+            Art(
+                "occurrent-eventstore-inmemory"
+                , "org.occurrent:eventstore-inmemory"
+                , listOf(
+                    "androidMain"
+                    , "jvmMain"
+                )
+            )
+        )
+    )
+
+    , "serialization" to Library(
+        "serialization"
+        , "1.12.0"
+        , listOf(
+            Art(
+                "serialization-json"
+                , "org.jetbrains.kotlinx:kotlinx-serialization-json"
+                , listOf(
+                    "commonMain"
+                )
+            )
+        )
+        , plugins = listOf(
+            Plug(
+                "kotlinSerialization"
+                , "org.jetbrains.kotlin.plugin.serialization"
+                , "kotlin"
+            )
+        )
+    )
+
+    , "turbine" to Library(
+        "turbine"
+        , "1.2.1"
+        , listOf(Art(
+            "turbine"
+            , "app.cash.turbine:turbine"
+            , listOf(
+                "commonTest")
+        ))
+    )
 )
 
 // Desktop and Server share core's single `jvm()` target.
@@ -307,8 +445,9 @@ class ProjectGenerator {
         f["README.md"] = readme(c)
     }
 
+    /** Each section's entries are sorted by key. */
     private fun versionCatalog(c: Ctx) = buildString {
-        val v = linkedMapOf("kotlin" to KOTLIN, "coroutines" to COROUTINES)
+        val v = sortedMapOf("kotlin" to KOTLIN, "coroutines" to COROUTINES)
         if (c.hasUi) {
             v["compose"] = COMPOSE
             v["compose-material3"] = COMPOSE_MATERIAL3
@@ -323,51 +462,56 @@ class ProjectGenerator {
             v["logback"] = LOGBACK
         }
         if (c.todo) v["mongodb"] = MONGODB
-        appendLine("[versions]")
-        v.forEach { (k, x) -> appendLine("$k = \"$x\"") }
 
-        appendLine("\n[libraries]")
-        appendLine("coroutines-core = { module = \"org.jetbrains.kotlinx:kotlinx-coroutines-core\", version.ref = \"coroutines\" }")
-        appendLine("coroutines-test = { module = \"org.jetbrains.kotlinx:kotlinx-coroutines-test\", version.ref = \"coroutines\" }")
+        // alias -> (module, version ref)
+        val libs = sortedMapOf<String, Pair<String, String>>()
+        fun lib(alias: String, module: String, ref: String) { libs[alias] = module to ref }
+        lib("coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core", "coroutines")
+        lib("coroutines-test", "org.jetbrains.kotlinx:kotlinx-coroutines-test", "coroutines")
         if (c.hasUi) {
-            appendLine("compose-runtime = { module = \"org.jetbrains.compose.runtime:runtime\", version.ref = \"compose\" }")
-            appendLine("compose-ui = { module = \"org.jetbrains.compose.ui:ui\", version.ref = \"compose\" }")
-            appendLine("compose-foundation = { module = \"org.jetbrains.compose.foundation:foundation\", version.ref = \"compose\" }")
-            appendLine("compose-material3 = { module = \"org.jetbrains.compose.material3:material3\", version.ref = \"compose-material3\" }")
+            lib("compose-runtime", "org.jetbrains.compose.runtime:runtime", "compose")
+            lib("compose-ui", "org.jetbrains.compose.ui:ui", "compose")
+            lib("compose-foundation", "org.jetbrains.compose.foundation:foundation", "compose")
+            lib("compose-material3", "org.jetbrains.compose.material3:material3", "compose-material3")
         }
-        if (c.has(Target.DESKTOP))
-            appendLine("coroutines-swing = { module = \"org.jetbrains.kotlinx:kotlinx-coroutines-swing\", version.ref = \"coroutines\" }")
-        if (c.has(Target.ANDROID))
-            appendLine("androidx-activity-compose = { module = \"androidx.activity:activity-compose\", version.ref = \"activity\" }")
-        c.activeLibs.forEach { l ->
-            l.arts.forEach { appendLine("${it.alias} = { module = \"${it.module}\", version.ref = \"${l.versionKey}\" }") }
-        }
+        if (c.has(Target.DESKTOP)) lib("coroutines-swing", "org.jetbrains.kotlinx:kotlinx-coroutines-swing", "coroutines")
+        if (c.has(Target.ANDROID)) lib("androidx-activity-compose", "androidx.activity:activity-compose", "activity")
+        c.activeLibs.forEach { l -> l.arts.forEach { lib(it.alias, it.module, l.versionKey) } }
         if (c.has(Target.SERVER)) {
-            appendLine("ktor-server-core = { module = \"io.ktor:ktor-server-core\", version.ref = \"ktor\" }")
-            appendLine("ktor-server-netty = { module = \"io.ktor:ktor-server-netty\", version.ref = \"ktor\" }")
-            appendLine("ktor-server-content-negotiation = { module = \"io.ktor:ktor-server-content-negotiation\", version.ref = \"ktor\" }")
-            appendLine("ktor-serialization-kotlinx-json = { module = \"io.ktor:ktor-serialization-kotlinx-json\", version.ref = \"ktor\" }")
-            appendLine("ktor-server-test-host = { module = \"io.ktor:ktor-server-test-host\", version.ref = \"ktor\" }")
-            appendLine("logback = { module = \"ch.qos.logback:logback-classic\", version.ref = \"logback\" }")
+            lib("ktor-server-core", "io.ktor:ktor-server-core", "ktor")
+            lib("ktor-server-netty", "io.ktor:ktor-server-netty", "ktor")
+            lib("ktor-server-content-negotiation", "io.ktor:ktor-server-content-negotiation", "ktor")
+            lib("ktor-serialization-kotlinx-json", "io.ktor:ktor-serialization-kotlinx-json", "ktor")
+            lib("ktor-server-test-host", "io.ktor:ktor-server-test-host", "ktor")
+            lib("logback", "ch.qos.logback:logback-classic", "logback")
         }
         if (c.todo) {
-            appendLine("ktor-client-content-negotiation = { module = \"io.ktor:ktor-client-content-negotiation\", version.ref = \"ktor\" }")
-            appendLine("ktor-server-cors = { module = \"io.ktor:ktor-server-cors\", version.ref = \"ktor\" }")
-            appendLine("mongodb-driver-kotlin-coroutine = { module = \"org.mongodb:mongodb-driver-kotlin-coroutine\", version.ref = \"mongodb\" }")
+            lib("ktor-client-content-negotiation", "io.ktor:ktor-client-content-negotiation", "ktor")
+            lib("ktor-server-cors", "io.ktor:ktor-server-cors", "ktor")
+            lib("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine", "mongodb")
         }
 
-        appendLine("\n[plugins]")
-        appendLine("kotlinMultiplatform = { id = \"org.jetbrains.kotlin.multiplatform\", version.ref = \"kotlin\" }")
-        if (c.hasJvm) appendLine("kotlinJvm = { id = \"org.jetbrains.kotlin.jvm\", version.ref = \"kotlin\" }")
+        // alias -> (plugin id, version ref)
+        val plugins = sortedMapOf<String, Pair<String, String>>()
+        fun plugin(alias: String, id: String, ref: String) { plugins[alias] = id to ref }
+        plugin("kotlinMultiplatform", "org.jetbrains.kotlin.multiplatform", "kotlin")
+        if (c.hasJvm) plugin("kotlinJvm", "org.jetbrains.kotlin.jvm", "kotlin")
         if (c.hasUi) {
-            appendLine("composeMultiplatform = { id = \"org.jetbrains.compose\", version.ref = \"compose\" }")
-            appendLine("composeCompiler = { id = \"org.jetbrains.kotlin.plugin.compose\", version.ref = \"kotlin\" }")
+            plugin("composeMultiplatform", "org.jetbrains.compose", "compose")
+            plugin("composeCompiler", "org.jetbrains.kotlin.plugin.compose", "kotlin")
         }
         if (c.has(Target.ANDROID)) {
-            appendLine("androidApplication = { id = \"com.android.application\", version.ref = \"agp\" }")
-            appendLine("androidMultiplatformLibrary = { id = \"com.android.kotlin.multiplatform.library\", version.ref = \"agp\" }")
+            plugin("androidApplication", "com.android.application", "agp")
+            plugin("androidMultiplatformLibrary", "com.android.kotlin.multiplatform.library", "agp")
         }
-        c.plugins.values.forEach { appendLine("${it.alias} = { id = \"${it.id}\", version.ref = \"${it.versionRef}\" }") }
+        c.plugins.values.forEach { plugin(it.alias, it.id, it.versionRef) }
+
+        appendLine("[versions]")
+        v.forEach { (k, x) -> appendLine("$k = \"$x\"") }
+        appendLine("\n[libraries]")
+        libs.forEach { (alias, m) -> appendLine("$alias = { module = \"${m.first}\", version.ref = \"${m.second}\" }") }
+        appendLine("\n[plugins]")
+        plugins.forEach { (alias, p) -> appendLine("$alias = { id = \"${p.first}\", version.ref = \"${p.second}\" }") }
     }
 
     // ---------- KMP library build script (core and app/sharedUI) ----------
@@ -489,7 +633,10 @@ class ProjectGenerator {
                 "api(libs.compose.ui)",
                 "implementation(libs.compose.foundation)",
                 "implementation(libs.compose.material3)",
-            ),
+            ) + if (c.lib("koin")) listOf(
+                "implementation(libs.koin.compose)",
+                "implementation(libs.koin.composeViewmodel)",
+            ) else emptyList(),
         )
         f["app/sharedUI/build.gradle.kts"] = kmpBuildScript(
             c, namespace = "${c.pkg}.ui", compose = true, jvm = c.has(Target.DESKTOP), iosFramework = IOS_FRAMEWORK,

@@ -44,6 +44,7 @@ object Catalog {
         LibraryOption("kotest", "Kotest", "Spec-style tests + expressive assertions", "Testing"),
         LibraryOption("turbine", "Turbine", "Testing for Kotlin Flows", "Testing"),
         LibraryOption("kermit", "Kermit", "Multiplatform logging (wired into AppLogger)", "Observability"),
+        LibraryOption("koin", "Koin", "Dependency injection (core + Compose/ViewModel)", "Dependency injection"),
         LibraryOption("arrow", "Arrow-kt", "Typed errors: use cases return Either<DomainError, T>", "Functional"),
         LibraryOption("ktor", "Ktor client", "HTTP client with the right engine per platform", "Networking"),
         LibraryOption("serialization", "kotlinx.serialization", "JSON serialization", "Networking"),
