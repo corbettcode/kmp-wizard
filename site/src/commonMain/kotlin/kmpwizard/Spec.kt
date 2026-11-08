@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class Target(val label: String) {
-    ANDROID("Android"), IOS("iOS"), DESKTOP("Desktop (JVM)"), WEB("Web (Wasm)"), SERVER("Server (Ktor)")
+    ANDROID("Android"), IOS("iOS"), DESKTOP("Desktop (JVM)"), WEB("Web (JS + Wasm)"), SERVER("Server (Ktor)")
 }
 
 @Serializable
@@ -14,7 +14,15 @@ data class ProjectSpec(
     val targets: Set<Target>,
     val slices: List<String>,
     val libraries: Set<String>,
+    /** Adds a sample `todo` slice: REST API on the server backed by MongoDB, clients call it over HTTP. */
+    val sampleTodo: Boolean = false,
 )
+
+/** Slice name used by the Todo sample. */
+const val TODO_SLICE = "todo"
+
+/** Library ids the Todo sample relies on (its HTTP client); always included when the sample is on. */
+val TODO_LIBRARIES = setOf("ktor", "serialization")
 
 data class LibraryOption(
     val id: String,
@@ -53,7 +61,9 @@ object Catalog {
         if (!Regex("^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$").matches(spec.packageName))
             add("Package must look like com.example.app (lowercase letters/digits).")
         if (spec.targets.isEmpty()) add("Select at least one platform.")
-        if (spec.slices.isEmpty()) add("Add at least one vertical slice.")
+        if (spec.slices.isEmpty() && !spec.sampleTodo) add("Add at least one vertical slice.")
+        if (spec.sampleTodo && Target.SERVER !in spec.targets) add("The Todo sample needs the Server platform.")
+        if (spec.sampleTodo && TODO_SLICE in spec.slices) add("Slice name '$TODO_SLICE' is used by the Todo sample.")
         spec.slices.forEach {
             if (!Regex("^[a-z][a-z0-9]{1,20}$").matches(it) || it in reserved)
                 add("Invalid slice name '$it' (lowercase letters/digits, 2-21 chars, not a Kotlin keyword).")

@@ -45,6 +45,7 @@ fun HomePage() {
     var slices by remember { mutableStateOf(listOf("greeting")) }
     var newSlice by remember { mutableStateOf("") }
     var libs by remember { mutableStateOf(setOf("kotest", "kermit")) }
+    var sampleTodo by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -57,6 +58,7 @@ fun HomePage() {
         slices,
         libs.filter { Catalog.byId[it]?.isAvailable(targets) == true }
             .toSet(),
+        sampleTodo = sampleTodo && Target.SERVER in targets,
     )
     val errors = spec.validate()
 
@@ -107,16 +109,36 @@ fun HomePage() {
                             if (newSlice.isNotBlank() && newSlice !in slices) { slices = slices + newSlice.trim(); newSlice = "" }
                         }) { Text("Add slice") }
                     }
+                    H3 { Text("Sample app") }
+                    val serverOn = Target.SERVER in targets
+                    Checkbox(
+                        checked = serverOn && sampleTodo,
+                        onCheckedChange = { on ->
+                            sampleTodo = on
+                            // Pre-select the libraries the sample uses; they stay selected if it's turned off again.
+                            if (on) libs = libs + TODO_LIBRARIES
+                        },
+                        enabled = serverOn,
+                    ) {
+                        SpanText(
+                            "Todo app: a '$TODO_SLICE' slice whose screens call the Ktor server, which stores todos in MongoDB" +
+                                if (serverOn) "" else " (select the Server platform first)"
+                        )
+                    }
                 }
                 3 -> Catalog.libraries.groupBy { it.category }.forEach { (cat, items) ->
                     H3 { Text(cat) }
                     items.forEach { lib ->
                         val ok = lib.isAvailable(targets)
+                        // The Todo sample needs these, so they can't be turned off while it's selected.
+                        val requiredByTodo = spec.sampleTodo && lib.id in TODO_LIBRARIES
                         Checkbox(
-                            checked = ok && lib.id in libs,
+                            checked = ok && (lib.id in libs || requiredByTodo),
                             onCheckedChange = { on -> libs = if (on) libs + lib.id else libs - lib.id },
-                            enabled = ok,
-                        ) { SpanText("${lib.name}: ${lib.description}") }
+                            enabled = ok && !requiredByTodo,
+                        ) {
+                            SpanText("${lib.name}: ${lib.description}" + if (requiredByTodo) " (used by the Todo sample)" else "")
+                        }
                     }
                 }
                 else -> {
@@ -124,6 +146,7 @@ fun HomePage() {
                     SpanText("${spec.name} (${spec.packageName})")
                     SpanText("Platforms: ${spec.targets.joinToString { it.label }.ifEmpty { "none" }}")
                     SpanText("Slices: ${spec.slices.joinToString().ifEmpty { "none" }}")
+                    SpanText("Todo sample (MongoDB): ${if (spec.sampleTodo) "yes" else "no"}")
                     SpanText("Libraries: ${spec.libraries.joinToString().ifEmpty { "none" }}")
                     errors.forEach { SpanText("⚠ $it", Modifier.color(Colors.Red)) }
                     status?.let { SpanText(it) }
