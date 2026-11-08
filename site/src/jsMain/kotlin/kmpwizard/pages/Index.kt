@@ -2,6 +2,8 @@ package kmpwizard.pages
 
 import androidx.compose.runtime.*
 import com.varabyte.kobweb.browser.api
+import com.varabyte.kobweb.browser.http.bodyAsBytes
+import com.varabyte.kobweb.browser.http.bodyOf
 import com.varabyte.kobweb.compose.css.Cursor
 import com.varabyte.kobweb.compose.css.FontWeight
 import com.varabyte.kobweb.compose.css.autoLength
@@ -25,6 +27,7 @@ import kotlinx.serialization.json.Json
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.LineStyle
 import org.jetbrains.compose.web.css.cssRem
+import org.jetbrains.compose.web.css.em
 import org.jetbrains.compose.web.css.px
 import org.jetbrains.compose.web.dom.H1
 import org.jetbrains.compose.web.dom.H3
@@ -69,7 +72,10 @@ fun HomePage() {
     Column(
         Modifier.fillMaxWidth().maxWidth(52.cssRem).margin(leftRight = autoLength).padding(2.cssRem).gap(1.cssRem)
     ) {
-        H1 { Text("KMP Project Wizard") }
+        H1 {
+            Text("KMP Project Wizard ")
+            SpanText("v$APP_VERSION", Modifier.fontSize(0.5.em).fontWeight(FontWeight.Normal).color(Colors.Gray))
+        }
 
         Row(Modifier.gap(1.cssRem)) {
             steps.forEachIndexed { i, label ->
@@ -196,7 +202,7 @@ fun HomePage() {
                     onClick = {
                         scope.launch {
                             busy = true; status = "Generating…"
-                            val bytes = window.api.tryPostBytes("generate", body = Json.encodeToString(spec).encodeToByteArray())
+                            val bytes = window.api.tryPost("generate", body = bodyOf(Json.encodeToString(spec), "application/json")) { bodyAsBytes() }
                             status = if (bytes == null) "Generation failed, check your selections." else {
                                 download(bytes, "${spec.slug()}.zip"); "Downloaded ${spec.slug()}.zip"
                             }

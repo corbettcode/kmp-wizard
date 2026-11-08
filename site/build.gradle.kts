@@ -8,12 +8,28 @@ plugins {
 }
 
 group = "kmpwizard"
-version = "1.0-SNAPSHOT"
+version = "1.0.0"
+
+// Generates kmpwizard.APP_VERSION from `version` above, so the UI always shows the build's version.
+val generateBuildInfo = tasks.register("generateBuildInfo") {
+    val outDir = layout.buildDirectory.dir("generated/buildInfo/kotlin")
+    val appVersion = project.version.toString()
+    inputs.property("version", appVersion)
+    outputs.dir(outDir)
+    doLast {
+        val file = outDir.get().file("kmpwizard/BuildInfo.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText("package kmpwizard\n\nconst val APP_VERSION = \"$appVersion\"\n")
+    }
+}
 
 kotlin {
     configAsKobwebApplication(includeServer = true)
 
     sourceSets {
+        commonMain {
+            kotlin.srcDir(generateBuildInfo)
+        }
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
         }
