@@ -1,21 +1,54 @@
-This is a [Kobweb](https://github.com/varabyte/kobweb) project instantiated from the `examples/todo` template.
+# KMP Wizard
 
-The purpose of this project is to showcase a minimal app, demonstrating:
+A [Kobweb](https://github.com/varabyte/kobweb) web app that walks you through a few choices and generates a
+downloadable Kotlin Multiplatform project as a ZIP.
 
-* a simple, reactive, single-page web app, making use of both Silk UI and Compose for Web
-* API endpoints (e.g. for adding, removing, and fetching items)
-* how to send types between client and server (see `Spec` which has text and an ID value, and which gets serialized
-  and sent over the wire)
+Pick the targets (Android, iOS, desktop, web, Ktor server), name your vertical slices, and add optional libraries
+(Arrow, Kermit, Kotest, Koin, Ktor, Occurrent, kotlinx-datetime, Turbine, Flyway, ...). The generated project uses
+clean architecture split into vertical slices: each slice gets its own `feature/<slice>/` directory with `shared`,
+`client` and `server` modules. An optional Todo sample shows a full round trip from a Compose screen over HTTP to a
+Ktor server backed by MongoDB.
 
-I'd like to give credit to https://blog.upstash.com/nextjs-todo for sharing the Next.js version.
+## Project layout
 
-## Run
-
-To run the sample, simply enter the following commands in the terminal:
-
-```bash
-$ cd site
-$ kobweb run
+```
+site/src/jsMain      wizard UI (Compose HTML + Silk)
+site/src/jvmMain     API: POST /api/generate, plus the project generator (kmpwizard.generator)
+site/src/commonMain  ProjectSpecification and validation, shared by UI and API
 ```
 
-and open [http://localhost:8080](http://localhost:8080) with your browser to see the result.
+## Run locally
+
+```bash
+cd site
+kobweb run
+```
+
+Then open [http://localhost:8080](http://localhost:8080).
+
+## Docker
+
+The `Dockerfile` exports the site in Kobweb's fullstack layout and runs the Kobweb server on a Java 21 runtime:
+
+```bash
+docker build -t kmp-wizard .
+docker run --rm -p 8080:8080 kmp-wizard
+```
+
+The build takes a few minutes: the export renders each page in headless Chromium, which Kobweb downloads during the
+build.
+
+## Deploy to DigitalOcean App Platform
+
+`.do/app.yaml` describes the app: one 1 GB instance built from the `Dockerfile` on `master`, serving port 8080 and
+redeploying on every push.
+
+1. Give DigitalOcean's GitHub app access to this repository.
+2. Create the app:
+
+   ```bash
+   doctl apps create --spec .do/app.yaml
+   ```
+
+   or use **Create App** in the control panel and pick this repository; it detects the `Dockerfile`.
+3. After changing the spec, apply it with `doctl apps update <app-id> --spec .do/app.yaml`.

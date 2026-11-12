@@ -1,0 +1,12 @@
+# Build output and local state; the image builds everything from source.
+**/build
+.gradle
+.kotlin
+.idea
+*.iml
+.git
+site/.kobweb/*
+!site/.kobweb/conf.yaml
+Dockerfile
+.dockerignore
+.do

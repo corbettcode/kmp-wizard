@@ -1,0 +1,28 @@
+# DigitalOcean App Platform spec. Create the app with:
+#   doctl apps create --spec .do/app.yaml
+# and apply later changes with:
+#   doctl apps update <app-id> --spec .do/app.yaml
+name: kmp-wizard
+region: nyc
+services:
+  - name: web
+    github:
+      repo: corbettcode/kmp-wizard
+      branch: master
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    # Kobweb serves the site and /api on the port in site/.kobweb/conf.yaml.
+    http_port: 8080
+    # The JVM server needs more than the 512 MB of the smallest size.
+    instance_size_slug: apps-s-1vcpu-1gb
+    instance_count: 1
+    health_check:
+      http_path: /
+      initial_delay_seconds: 20
+ingress:
+  rules:
+    - component:
+        name: web
+      match:
+        path:
+          prefix: /
