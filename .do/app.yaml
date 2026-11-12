@@ -13,8 +13,8 @@ services:
     dockerfile_path: Dockerfile
     # Kobweb serves the site and /api on the port in site/.kobweb/conf.yaml.
     http_port: 8080
-    # The JVM server needs more than the 512 MB of the smallest size.
-    instance_size_slug: apps-s-1vcpu-1gb
+    # 512 MB is enough: idle ~140 MB, ~370 MB peak under 20 concurrent generate requests.
+    instance_size_slug: apps-s-1vcpu-0.5gb
     instance_count: 1
     health_check:
       http_path: /

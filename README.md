@@ -40,7 +40,7 @@ build.
 
 ## Deploy to DigitalOcean App Platform
 
-`.do/app.yaml` describes the app: one 1 GB instance built from the `Dockerfile` on `master`, serving port 8080 and
+`.do/app.yaml` describes the app: one 512 MB instance built from the `Dockerfile` on `master`, serving port 8080 and
 redeploying on every push.
 
 1. Give DigitalOcean's GitHub app access to this repository.
