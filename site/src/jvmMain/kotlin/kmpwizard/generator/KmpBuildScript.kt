@@ -2,7 +2,15 @@ package kmpwizard.generator
 
 import kmpwizard.Target
 
-// ---------- KMP library build script (core and app/sharedUI) ----------
+// ---------- KMP library build script (core, coreUI, slice modules and app/sharedUI) ----------
+
+/**
+ * Gives a module a unique Maven group and Kotlin module / archive [name], for modules whose project
+ * name repeats in the build (every slice has `shared`, `client` and `server`).
+ */
+class ModuleIdentity(val group: String, val name: String) {
+    val comment = "// Every slice has shared/client/server modules: a unique group and name keep their jars and Kotlin modules apart."
+}
 
 fun kmpBuildScript(
     c: ProjectContext,
@@ -13,6 +21,7 @@ fun kmpBuildScript(
     plugins: List<String>,
     deps: Map<String, List<String>>,
     junit: Boolean = false,
+    identity: ModuleIdentity? = null,
 ) = buildString {
     if (c.has(kmpwizard.Target.ANDROID)) appendLine("import org.jetbrains.kotlin.gradle.dsl.JvmTarget")
     if (c.has(kmpwizard.Target.WEB)) appendLine("import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl")
@@ -24,7 +33,13 @@ fun kmpBuildScript(
         appendLine("    alias(libs.plugins.composeCompiler)")
     }
     plugins.forEach { appendLine("    alias(libs.plugins.$it)") }
-    appendLine("}\n\nkotlin {")
+    appendLine("}\n")
+    if (identity != null) {
+        appendLine(identity.comment)
+        appendLine("group = \"${identity.group}\"")
+        appendLine("base { archivesName.set(\"${identity.name}\") }\n")
+    }
+    appendLine("kotlin {")
     if (c.has(kmpwizard.Target.ANDROID)) {
         appendLine("    android {")
         appendLine("        namespace = \"$namespace\"")

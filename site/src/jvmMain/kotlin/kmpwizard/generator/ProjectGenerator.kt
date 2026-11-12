@@ -21,13 +21,14 @@ import kotlin.io.path.*
  * https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html
  *
  *   core/            shared kernel for every slice: logging, errors (no UI)
- *   feature/         one package per vertical slice, split by where it runs:
+ *   coreUI/          UI kernel for every slice: the Feature contract the shell renders (Compose)
+ *   feature/<slice>/ one directory per vertical slice, package <pkg>.features.<slice>, split by where it runs:
  *     shared/        domain + data (KMP, every target)
  *     client/        presentation + client adapters (KMP + Compose)
  *     server/        Ktor routes + server adapters (JVM)
  *   app/sharedUI/    Compose Multiplatform shell that renders the slices (exports the iOS framework)
  *   app/androidApp/  app/desktopApp/  app/webApp/  app/iosApp/   entry points
- *   server/          Ktor bootstrap, depends on :feature:server
+ *   server/          Ktor bootstrap, depends on every :feature:<slice>:server
  */
 
 /**
@@ -295,10 +296,8 @@ class ProjectGenerator {
 
     private fun sharedUiModule(c: ProjectContext, f: MutableMap<String, String>) {
         val deps = linkedMapOf(
-            "commonMain" to listOf(
-                "api(projects.feature.client)",
-                "api(libs.compose.runtime)",
-                "api(libs.compose.ui)",
+            "commonMain" to listOf("api(projects.coreUI)") +
+                c.allSlices.map { "implementation(${sliceProject(it, "client")})" } + listOf(
                 "implementation(libs.compose.foundation)",
                 "implementation(libs.compose.material3)",
             ) + if (c.lib("koin")) listOf(
@@ -315,7 +314,7 @@ class ProjectGenerator {
         val names = c.allSlices.map { it.replaceFirstChar(Char::uppercase) }
         f["$base/AppFeatures.kt"] = buildString {
             appendLine("package ${c.pkg}.ui\n")
-            appendLine("import ${featuresPkg(c)}.Feature")
+            appendLine("import ${coreUiPkg(c)}.Feature")
             c.allSlices.zip(names).forEach { (s, x) -> appendLine("import ${featuresPkg(c)}.$s.${x}Feature") }
             appendLine("\nval features: List<Feature> = listOf(${names.joinToString { it + "Feature" }})")
         }
@@ -547,7 +546,7 @@ class ProjectGenerator {
         """.trimIndent() else ""
     }
 
-    // ---------- server: Ktor bootstrap; each slice's routes come from its server package in :feature:server ----------
+    // ---------- server: Ktor bootstrap; each slice's routes come from its :feature:<slice>:server module ----------
 
     private fun server(c: ProjectContext, f: MutableMap<String, String>) {
         val sp = c.appPkg("server")
@@ -564,7 +563,7 @@ class ProjectGenerator {
             application { mainClass.set("$sp.ApplicationKt") }
 
             dependencies {
-                implementation(projects.feature.server)
+                __SLICE_SERVERS__
                 implementation(libs.ktor.server.core)
                 implementation(libs.ktor.server.netty)
                 implementation(libs.ktor.server.content.negotiation)
@@ -578,7 +577,9 @@ class ProjectGenerator {
             }
 
             tasks.test { useJUnitPlatform() }
-        """.trimIndent()
+        """.trimIndent().replace(
+            "__SLICE_SERVERS__", c.allSlices.joinToString("\n    ") { "implementation(${sliceProject(it, "server")})" },
+        )
         f["server/src/main/kotlin/$sd/Application.kt"] = buildString {
             appendLine("package $sp\n")
             appendLine("import io.ktor.serialization.kotlinx.json.json")

@@ -1,6 +1,6 @@
 package kmpwizard.generator
 
-// ---------- core: shared kernel for every slice (logging, errors, server URL). Slices live in :feature ----------
+// ---------- core: shared kernel for every slice (logging, errors, server URL). Slices live in feature/<slice>/ ----------
 
 fun coreModule(
     c: ProjectContext

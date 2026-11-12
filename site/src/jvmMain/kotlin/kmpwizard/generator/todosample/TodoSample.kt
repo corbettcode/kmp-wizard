@@ -3,6 +3,7 @@ package kmpwizard.generator.todosample
 import kmpwizard.TODO_SLICE
 import kmpwizard.generator.ProjectContext
 import kmpwizard.generator.SERVER_PORT
+import kmpwizard.generator.coreUiPkg
 import kmpwizard.generator.featureSrc
 import kmpwizard.generator.featuresPkg
 
@@ -17,10 +18,10 @@ private fun todoResultImports(c: ProjectContext) =
 fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
     val s = TODO_SLICE
     val p = "${featuresPkg(c)}.$s"
-    // Every layer of the slice lives in one package of the feature module.
-    val b = "${featureSrc(c, "commonMain")}/$s"
-    // Client-only code (Compose, Ktor client) goes in feature/client; the server never depends on it.
-    val ub = "${featureSrc(c, "clientMain")}/$s"
+    // Every layer of the slice lives in one package, across feature/todo/shared, client and server.
+    val b = featureSrc(c, s, "commonMain")
+    // Client-only code (Compose, Ktor client) goes in feature/todo/client; the server never depends on it.
+    val ub = featureSrc(c, s, "clientMain")
     val arrow = c.lib("arrow")
     val imports = todoResultImports(c)
     fun r(t: String) = todoResult(c, t)
@@ -218,7 +219,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
         """.trimIndent()
 
     // ----- tests: use cases against an in-memory fake -----
-    val tb = "${featureSrc(c, "commonTest")}/$s"
+    val tb = featureSrc(c, s, "commonTest")
     f["$tb/FakeTodoRepository.kt"] = """
             package $p
 
@@ -392,7 +393,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
 
             import androidx.compose.runtime.Composable
             import ${c.pkg}.core.defaultServerUrl
-            import ${featuresPkg(c)}.Feature
+            import ${coreUiPkg(c)}.Feature
             import $p.data.HttpTodoRepository
             import $p.domain.AddTodoUseCase
             import $p.domain.DeleteTodoUseCase
@@ -418,7 +419,7 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
     val s = TODO_SLICE
     val p = "${featuresPkg(c)}.$s"
     val tp = "$p.server"
-    val td = "${featureSrc(c, "serverMain")}/$s/server"
+    val td = "${featureSrc(c, s, "serverMain")}/server"
     val arrow = c.lib("arrow")
     f["$td/MongoTodoRepository.kt"] = """
             package $tp
