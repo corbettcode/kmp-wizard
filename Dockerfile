@@ -19,12 +19,16 @@ WORKDIR /project
 COPY . .
 
 # Same as `kobweb export --layout fullstack`, without needing the Kobweb CLI.
+# Kotlin compiles in-process: a Kotlin daemon outlives the build and deletes its files in ~/.kotlin while
+# App Platform's builder (kaniko) snapshots the layer, which fails the build.
 RUN ./gradlew --no-daemon --console=plain :site:kobwebExport \
+    -Pkotlin.compiler.execution.strategy=in-process \
     -PkobwebReuseServer=false \
     -PkobwebEnv=DEV \
     -PkobwebRunLayout=FULLSTACK \
     -PkobwebBuildTarget=RELEASE \
-    -PkobwebExportLayout=FULLSTACK
+    -PkobwebExportLayout=FULLSTACK \
+    && rm -rf /root/.kotlin
 
 # ---------- run: just a JRE, the exported site and the server jar ----------
 FROM eclipse-temurin:21-jre-noble
