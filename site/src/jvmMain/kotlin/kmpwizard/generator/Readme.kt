@@ -51,6 +51,7 @@ fun readme(c: ProjectContext) = buildString {
         appendLine("3. Run any client and open the Todo tab. Clients use `http://localhost:$SERVER_PORT`; the Android emulator uses `http://10.0.2.2:$SERVER_PORT`.")
         appendLine("   Change it in `core/src/*Main/kotlin/${c.dir}/core/ServerUrl.*.kt`.")
     }
+    if (c.lib(FlywayGenerator.ID)) append(FlywayGenerator.readme(c))
     appendLine("\n## Run")
     if (c.has(kmpwizard.Target.DESKTOP)) appendLine("- Desktop: `./gradlew :app:desktopApp:run`")
     if (c.has(kmpwizard.Target.ANDROID)) appendLine("- Android: `./gradlew :app:androidApp:installDebug`")

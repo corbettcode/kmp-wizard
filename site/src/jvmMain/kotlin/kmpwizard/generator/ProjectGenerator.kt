@@ -185,21 +185,33 @@ class ProjectGenerator {
         """.trimIndent() + "\n"
         // Same line-ending rules `gradle init` writes, so gradlew.bat keeps CRLF and the jar isn't mangled.
         f[".gitattributes"] = "gradlew text eol=lf\n*.bat text eol=crlf\n*.jar binary\n"
-        if (c.todo) f["docker-compose.yml"] = """
-            # Local MongoDB for the Todo sample: docker compose up -d
-            services:
-              mongo:
-                image: mongo:8
-                ports:
-                  - "27017:27017"
-                volumes:
-                  - mongo-data:/data/db
-            volumes:
-              mongo-data:
-        """.trimIndent() + "\n"
+        dockerCompose(c)?.let { f["docker-compose.yml"] = it }
         f[".gitignore"] = "build/\n.gradle/\n.idea/\n.kotlin/\nlocal.properties\n*.iml\nxcuserdata/\n"
         f["gradle/libs.versions.toml"] = versionCatalog(c)
         f["README.md"] = readme(c)
+    }
+
+    /** Local services the project needs (MongoDB for the Todo sample, PostgreSQL for Flyway); null if none. */
+    private fun dockerCompose(c: ProjectContext): String? {
+        val services = buildList {
+            if (c.todo) add("Todo sample" to ("""
+                mongo:
+                  image: mongo:8
+                  ports:
+                    - "27017:27017"
+                  volumes:
+                    - mongo-data:/data/db
+            """.trimIndent() to "mongo-data:"))
+            if (c.lib(FlywayGenerator.ID)) add("Flyway" to FlywayGenerator.dockerService(c))
+        }
+        if (services.isEmpty()) return null
+        return buildString {
+            appendLine("# Local services for ${services.joinToString(" and ") { it.first }}: docker compose up -d")
+            appendLine("services:")
+            services.forEach { (_, svc) -> appendLine(svc.first.prependIndent("  ")) }
+            appendLine("volumes:")
+            services.forEach { (_, svc) -> appendLine("  ${svc.second}") }
+        }
     }
 
     /** Each section's entries are sorted by key. */
@@ -219,6 +231,7 @@ class ProjectGenerator {
             v["logback"] = LOGBACK
         }
         if (c.todo) v["mongodb"] = MONGODB
+        if (c.lib(FlywayGenerator.ID)) FlywayGenerator.versions(v)
 
         // alias -> (module, version ref)
         val libs = sortedMapOf<String, Pair<String, String>>()
@@ -247,6 +260,7 @@ class ProjectGenerator {
             lib("ktor-server-cors", "io.ktor:ktor-server-cors", "ktor")
             lib("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine", "mongodb")
         }
+        if (c.lib(FlywayGenerator.ID)) FlywayGenerator.libraries(::lib)
 
         // alias -> (plugin id, version ref)
         val plugins = sortedMapOf<String, Pair<String, String>>()
@@ -774,6 +788,7 @@ class ProjectGenerator {
         val sp = c.appPkg("server")
         val sd = c.appDir("server")
         val slices = c.spec.slices.map { it to it.replaceFirstChar(Char::uppercase) }
+        val flyway = c.lib(FlywayGenerator.ID)
         f["server/build.gradle.kts"] = """
             plugins {
                 alias(libs.plugins.kotlinJvm)
@@ -791,7 +806,8 @@ class ProjectGenerator {
                 implementation(libs.ktor.serialization.kotlinx.json)
                 implementation(libs.logback)${if (c.todo) """
                 implementation(libs.ktor.server.cors)
-                implementation(libs.mongodb.driver.kotlin.coroutine)""" else ""}
+                implementation(libs.mongodb.driver.kotlin.coroutine)""" else ""}${
+                    if (flyway) FlywayGenerator.serverDependencies.joinToString("") { "\n                $it" } else ""}
                 testImplementation(kotlin("test"))
                 testImplementation(libs.ktor.server.test.host)
             }
@@ -817,10 +833,12 @@ class ProjectGenerator {
                 appendLine("import $sp.todo.MongoTodoRepository")
                 appendLine("import $sp.todo.todoRoutes")
             }
+            if (flyway) FlywayGenerator.applicationImports(c).forEach(::appendLine)
             appendLine("\n/** Port, host and modules come from src/main/resources/application.conf. */")
             appendLine("fun main(args: Array<String>) = EngineMain.main(args)\n")
             appendLine("fun Application.module() {")
             appendLine("    install(ContentNegotiation) { json() }")
+            if (flyway) FlywayGenerator.applicationStartup.forEach { appendLine("    $it") }
             if (c.todo) {
                 appendLine("    // The web app is served from another port, so browsers need CORS to call this API.")
                 appendLine("    install(CORS) {")
@@ -881,7 +899,8 @@ class ProjectGenerator {
             }
         }
         if (c.todo) todoServer(c, f)
-        f["server/src/main/resources/application.conf"] = """
+        if (flyway) FlywayGenerator.files(c, f)
+        f["server/src/main/resources/application.conf"] = ("""
             ktor {
                 deployment {
                     port = $SERVER_PORT
@@ -900,7 +919,7 @@ class ProjectGenerator {
                 database = "${c.slug.replace('-', '_')}"
                 database = ${'$'}{?MONGODB_DATABASE}
             }
-        """.trimIndent() else ""
+        """.trimIndent() else "") + if (flyway) "\n" + FlywayGenerator.config(c) else ""
         f["server/src/main/resources/logback.xml"] = """
             <configuration>
                 <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
@@ -918,14 +937,16 @@ class ProjectGenerator {
             appendLine("import io.ktor.server.testing.testApplication")
             appendLine("import kotlin.test.Test")
             appendLine("import kotlin.test.assertEquals")
+            if (flyway) FlywayGenerator.testImports(c).forEach(::appendLine)
+            val config = if (flyway) FlywayGenerator.TEST_CONFIG else "ApplicationConfig(\"application.conf\")"
             appendLine("\nclass ApplicationTest {")
             appendLine("    @Test fun root() = testApplication {")
-            appendLine("        environment { config = ApplicationConfig(\"application.conf\") }")
+            appendLine("        environment { config = $config }")
             appendLine("        assertEquals(HttpStatusCode.OK, client.get(\"/\").status)")
             appendLine("    }")
             slices.forEach { (s, _) ->
                 appendLine("    @Test fun ${s}Endpoint() = testApplication {")
-                appendLine("        environment { config = ApplicationConfig(\"application.conf\") }")
+                appendLine("        environment { config = $config }")
                 appendLine("        assertEquals(HttpStatusCode.OK, client.get(\"/api/$s\").status)")
                 appendLine("    }")
             }

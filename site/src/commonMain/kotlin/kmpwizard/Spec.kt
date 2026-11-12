@@ -50,6 +50,10 @@ object Catalog {
         LibraryOption("serialization", "kotlinx.serialization", "JSON serialization", "Networking"),
         LibraryOption("datetime", "kotlinx-datetime", "Multiplatform date/time", "Utilities"),
         LibraryOption(
+            "flyway", "Flyway", "SQL migrations for the server: PostgreSQL (docker-compose), H2 in tests",
+            "Database", setOf(Target.SERVER),
+        ),
+        LibraryOption(
             "occurrent", "Occurrent", "Event sourcing. JVM only, added to Android/Desktop/Server source sets",
             "Event sourcing", setOf(Target.ANDROID, Target.DESKTOP, Target.SERVER),
         ),
