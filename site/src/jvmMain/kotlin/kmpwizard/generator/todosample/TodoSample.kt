@@ -38,7 +38,36 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
         }
 
     // ----- domain -----
-    f["$b/domain/Todo.kt"] = "package $p.domain\n\ndata class Todo(val id: String, val title: String, val done: Boolean)\n"
+    f["$b/domain/Todo.kt"] = "package $p.domain\n\ndata class Todo(val id: TodoId, val title: String, val done: Boolean)\n"
+    f["$b/domain/TodoId.kt"] = """
+            @file:OptIn(ExperimentalUuidApi::class)
+
+            package $p.domain
+
+            import kotlin.jvm.JvmInline
+            import kotlin.uuid.ExperimentalUuidApi
+            import kotlin.uuid.Uuid
+
+            /**
+             * Identity of a [Todo]: a UUID version 7. Its leading bits are a millisecond timestamp,
+             * so ids sort by creation time (also in their string form).
+             */
+            @JvmInline
+            value class TodoId(val value: Uuid) {
+                override fun toString() = value.toString()
+
+                companion object {
+                    /** A new, time-ordered id. */
+                    fun generate() = TodoId(Uuid.generateV7())
+
+                    /** Parses the hex-and-dash form; throws IllegalArgumentException if [text] is not a UUID. */
+                    fun parse(text: String) = TodoId(Uuid.parse(text))
+
+                    /** Parses the hex-and-dash form; null if [text] is not a UUID. */
+                    fun parseOrNull(text: String) = Uuid.parseOrNull(text)?.let(::TodoId)
+                }
+            }
+        """.trimIndent()
     f["$b/domain/TodoRepository.kt"] = """
             package $p.domain
 
@@ -46,9 +75,9 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
                 suspend fun all(): List<Todo>
                 suspend fun add(title: String): Todo
                 /** Returns null when no todo has this id. */
-                suspend fun setDone(id: String, done: Boolean): Todo?
+                suspend fun setDone(id: TodoId, done: Boolean): Todo?
                 /** Returns false when no todo has this id. */
-                suspend fun delete(id: String): Boolean
+                suspend fun delete(id: TodoId): Boolean
             }
         """.trimIndent()
     f["$b/domain/Attempt.kt"] = if (arrow) """
@@ -92,13 +121,13 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             }
 
             class SetTodoDoneUseCase(private val repository: TodoRepository) {
-                suspend operator fun invoke(id: String, done: Boolean): ${r("Todo")} = attempt {
+                suspend operator fun invoke(id: TodoId, done: Boolean): ${r("Todo")} = attempt {
                     repository.setDone(id, done) ?: throw NoSuchElementException("No todo with id ${'$'}id")
                 }
             }
 
             class DeleteTodoUseCase(private val repository: TodoRepository) {
-                suspend operator fun invoke(id: String): ${r("Unit")} = attempt {
+                suspend operator fun invoke(id: TodoId): ${r("Unit")} = attempt {
                     if (!repository.delete(id)) throw NoSuchElementException("No todo with id ${'$'}id")
                 }
             }
@@ -110,8 +139,9 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
 
             import kotlinx.serialization.Serializable
             import $p.domain.Todo
+            import $p.domain.TodoId
 
-            /** Wire format of /api/$s, used by both the HTTP client and the server. */
+            /** Wire format of /api/$s, used by both the HTTP client and the server. [id] is a UUID v7 string. */
             @Serializable
             data class TodoDto(val id: String, val title: String, val done: Boolean)
 
@@ -121,8 +151,8 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             @Serializable
             data class TodoPatchDto(val done: Boolean)
 
-            fun Todo.toDto() = TodoDto(id, title, done)
-            fun TodoDto.toDomain() = Todo(id, title, done)
+            fun Todo.toDto() = TodoDto(id.toString(), title, done)
+            fun TodoDto.toDomain() = Todo(TodoId.parse(id), title, done)
         """.trimIndent()
     f["$b/data/HttpTodoRepository.kt"] = """
             package $p.data
@@ -141,6 +171,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             import io.ktor.http.contentType
             import io.ktor.serialization.kotlinx.json.json
             import $p.domain.Todo
+            import $p.domain.TodoId
             import $p.domain.TodoRepository
 
             /** The engine is picked per platform from the Ktor engine on the classpath. */
@@ -164,14 +195,14 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
                         setBody(NewTodoDto(title))
                     }.body<TodoDto>().toDomain()
 
-                override suspend fun setDone(id: String, done: Boolean): Todo? = nullIfNotFound {
+                override suspend fun setDone(id: TodoId, done: Boolean): Todo? = nullIfNotFound {
                     client.patch("${'$'}url/${'$'}id") {
                         contentType(ContentType.Application.Json)
                         setBody(TodoPatchDto(done))
                     }.body<TodoDto>().toDomain()
                 }
 
-                override suspend fun delete(id: String): Boolean =
+                override suspend fun delete(id: TodoId): Boolean =
                     nullIfNotFound { client.delete("${'$'}url/${'$'}id") } != null
 
                 private inline fun <T> nullIfNotFound(block: () -> T): T? = try {
@@ -188,16 +219,16 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             package $p
 
             import $p.domain.Todo
+            import $p.domain.TodoId
             import $p.domain.TodoRepository
 
             class FakeTodoRepository : TodoRepository {
-                private val todos = linkedMapOf<String, Todo>()
-                private var nextId = 1
+                private val todos = linkedMapOf<TodoId, Todo>()
 
                 override suspend fun all() = todos.values.toList()
-                override suspend fun add(title: String) = Todo("${'$'}{nextId++}", title, false).also { todos[it.id] = it }
-                override suspend fun setDone(id: String, done: Boolean) = todos[id]?.copy(done = done)?.also { todos[id] = it }
-                override suspend fun delete(id: String) = todos.remove(id) != null
+                override suspend fun add(title: String) = Todo(TodoId.generate(), title, false).also { todos[it.id] = it }
+                override suspend fun setDone(id: TodoId, done: Boolean) = todos[id]?.copy(done = done)?.also { todos[id] = it }
+                override suspend fun delete(id: TodoId) = todos.remove(id) != null
             }
         """.trimIndent()
     f["$tb/TodoUseCasesTest.kt"] = if (c.lib("kotest")) """
@@ -206,6 +237,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             import $p.domain.AddTodoUseCase
             import $p.domain.GetTodosUseCase
             import $p.domain.SetTodoDoneUseCase
+            import $p.domain.TodoId
             import io.kotest.core.spec.style.StringSpec
             import io.kotest.matchers.nulls.shouldBeNull
             import io.kotest.matchers.shouldBe
@@ -220,7 +252,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
                     AddTodoUseCase(FakeTodoRepository())(" ").getOrNull().shouldBeNull()
                 }
                 "marking an unknown todo fails" {
-                    SetTodoDoneUseCase(FakeTodoRepository())("missing", true).getOrNull().shouldBeNull()
+                    SetTodoDoneUseCase(FakeTodoRepository())(TodoId.generate(), true).getOrNull().shouldBeNull()
                 }
             })
         """.trimIndent() else """
@@ -229,6 +261,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             import $p.domain.AddTodoUseCase
             import $p.domain.GetTodosUseCase
             import $p.domain.SetTodoDoneUseCase
+            import $p.domain.TodoId
             import kotlinx.coroutines.test.runTest
             import kotlin.test.Test
             import kotlin.test.assertEquals
@@ -246,7 +279,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
                 }
 
                 @Test fun markingAnUnknownTodoFails() = runTest {
-                    assertNull(SetTodoDoneUseCase(FakeTodoRepository())("missing", true).getOrNull())
+                    assertNull(SetTodoDoneUseCase(FakeTodoRepository())(TodoId.generate(), true).getOrNull())
                 }
             }
         """.trimIndent()
@@ -389,45 +422,44 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
             import com.mongodb.client.model.Filters.eq
             import com.mongodb.client.model.FindOneAndUpdateOptions
             import com.mongodb.client.model.ReturnDocument
+            import com.mongodb.client.model.Sorts
             import com.mongodb.client.model.Updates
             import com.mongodb.kotlin.client.coroutine.MongoDatabase
             import kotlinx.coroutines.flow.map
             import kotlinx.coroutines.flow.toList
             import org.bson.Document
-            import org.bson.types.ObjectId
             import $p.domain.Todo
+            import $p.domain.TodoId
             import $p.domain.TodoRepository
 
-            /** Stores todos in the `todos` collection. Server-only data adapter for the `$s` slice. */
+            /**
+             * Stores todos in the `todos` collection. Server-only data adapter for the `$s` slice.
+             * `_id` holds the [TodoId] as a UUID v7 string, so sorting by `_id` sorts by creation time.
+             */
             class MongoTodoRepository(db: MongoDatabase) : TodoRepository {
                 private val todos = db.getCollection<Document>("todos")
 
-                override suspend fun all(): List<Todo> = todos.find().map { it.toTodo() }.toList()
+                override suspend fun all(): List<Todo> =
+                    todos.find().sort(Sorts.ascending("_id")).map { it.toTodo() }.toList()
 
                 override suspend fun add(title: String): Todo {
-                    val doc = Document("_id", ObjectId()).append("title", title).append("done", false)
+                    val doc = Document("_id", TodoId.generate().toString()).append("title", title).append("done", false)
                     todos.insertOne(doc)
                     return doc.toTodo()
                 }
 
-                override suspend fun setDone(id: String, done: Boolean): Todo? {
-                    val oid = id.toObjectIdOrNull() ?: return null
-                    return todos.findOneAndUpdate(
-                        eq("_id", oid),
+                override suspend fun setDone(id: TodoId, done: Boolean): Todo? =
+                    todos.findOneAndUpdate(
+                        eq("_id", id.toString()),
                         Updates.set("done", done),
                         FindOneAndUpdateOptions().returnDocument(ReturnDocument.AFTER),
                     )?.toTodo()
-                }
 
-                override suspend fun delete(id: String): Boolean {
-                    val oid = id.toObjectIdOrNull() ?: return false
-                    return todos.deleteOne(eq("_id", oid)).deletedCount > 0
-                }
+                override suspend fun delete(id: TodoId): Boolean =
+                    todos.deleteOne(eq("_id", id.toString())).deletedCount > 0
             }
 
-            private fun String.toObjectIdOrNull() = if (ObjectId.isValid(this)) ObjectId(this) else null
-
-            private fun Document.toTodo() = Todo(getObjectId("_id").toHexString(), getString("title"), getBoolean("done", false))
+            private fun Document.toTodo() = Todo(TodoId.parse(getString("_id")), getString("title"), getBoolean("done", false))
         """.trimIndent()
 
     fun fold(ok: String) = if (arrow) "fold({ call.respondError(it) }, { $ok })"
@@ -466,6 +498,7 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
             import $p.domain.DeleteTodoUseCase
             import $p.domain.GetTodosUseCase
             import $p.domain.SetTodoDoneUseCase
+            import $p.domain.TodoId
             import $p.domain.TodoRepository
 
             /**
@@ -474,6 +507,7 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
              *   POST   /api/$s           create  {"title": "..."}
              *   PATCH  /api/$s/{id}      update  {"done": true}
              *   DELETE /api/$s/{id}      delete
+             * {id} is a UUID v7; anything else gets 400 Bad Request.
              */
             fun Route.todoRoutes(repository: TodoRepository) {
                 val getTodos = GetTodosUseCase(repository)
@@ -487,12 +521,21 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
                         addTodo(body.title).${fold("call.respond(HttpStatusCode.Created, it.toDto())")}
                     }
                     patch("/{id}") {
+                        val id = call.todoId() ?: return@patch call.respondInvalidId()
                         val body = call.receive<TodoPatchDto>()
-                        setDone(call.parameters["id"]!!, body.done).${fold("call.respond(it.toDto())")}
+                        setDone(id, body.done).${fold("call.respond(it.toDto())")}
                     }
-                    delete("/{id}") { deleteTodo(call.parameters["id"]!!).${fold("call.respond(HttpStatusCode.NoContent)")} }
+                    delete("/{id}") {
+                        val id = call.todoId() ?: return@delete call.respondInvalidId()
+                        deleteTodo(id).${fold("call.respond(HttpStatusCode.NoContent)")}
+                    }
                 }
             }
+
+            private fun ApplicationCall.todoId() = parameters["id"]?.let(TodoId::parseOrNull)
+
+            private suspend fun ApplicationCall.respondInvalidId() =
+                respond(HttpStatusCode.BadRequest, "Todo id must be a UUID")
 
             __RESPOND_ERROR__
         """.trimIndent().replace("\n\n\n", "\n\n").replace("route\n\n", "route\n")
