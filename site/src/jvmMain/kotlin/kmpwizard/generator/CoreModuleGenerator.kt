@@ -1,6 +1,6 @@
 package kmpwizard.generator
 
-// ---------- core: shared by clients and server. Each slice's domain + data, no UI ----------
+// ---------- core: shared kernel for every slice (logging, errors, server URL). Slices live in :feature ----------
 
 fun coreModule(
     c: ProjectContext
@@ -20,15 +20,7 @@ fun coreModule(
     add("commonTest", "implementation(kotlin(\"test\"))")
     add("commonTest", "implementation(libs.coroutines.test)")
 
-    c.activeLibs.forEach { l ->
-        l.arts.forEach { a ->
-            a.sets.filter(c::setActive).forEach { add(it, "${if (a.api) "api" else "implementation"}(libs.${a.alias.replace('-', '.')})") }
-        }
-    }
-    if (c.todo) {
-        add("commonMain", "implementation(libs.ktor.client.content.negotiation)")
-        add("commonMain", "implementation(libs.ktor.serialization.kotlinx.json)")
-    }
+    c.libraryDependencies().forEach { (set, d) -> add(set, d) }
     f["core/build.gradle.kts"] = kmpBuildScript(
         c, namespace = "${c.pkg}.core", compose = false, jvm = c.hasJvm, iosFramework = null,
         plugins = c.corePlugins, deps = deps, junit = c.lib("kotest"),

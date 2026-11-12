@@ -237,4 +237,10 @@ class ProjectContext(val spec: ProjectSpecification) {
     }
     /** Plugins from selected libraries, applied to core. */
     val corePlugins = activeLibs.flatMap { it.plugins }.map { it.alias }.distinct()
+    /** Selected libraries as (source set, dependency declaration) for the KMP modules core and feature/shared. */
+    fun libraryDependencies(): List<Pair<String, String>> = activeLibs.flatMap { l ->
+        l.arts.flatMap { a ->
+            a.sets.filter(::setActive).map { it to "${if (a.api) "api" else "implementation"}(libs.${a.alias.replace('-', '.')})" }
+        }
+    }
 }

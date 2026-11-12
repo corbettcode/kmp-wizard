@@ -3,6 +3,8 @@ package kmpwizard.generator.todosample
 import kmpwizard.TODO_SLICE
 import kmpwizard.generator.ProjectContext
 import kmpwizard.generator.SERVER_PORT
+import kmpwizard.generator.featureSrc
+import kmpwizard.generator.featuresPkg
 
 // ---------- Todo sample: clients -> HTTP -> server -> MongoDB, sharing domain + DTOs via core ----------
 
@@ -14,9 +16,11 @@ private fun todoResultImports(c: ProjectContext) =
 
 fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
     val s = TODO_SLICE
-    val p = "${c.pkg}.features.$s"
-    val b = "core/src/commonMain/kotlin/${c.dir}/features/$s"
-    val ub = "app/sharedUI/src/commonMain/kotlin/${c.dir}/features/$s"
+    val p = "${featuresPkg(c)}.$s"
+    // Every layer of the slice lives in one package of the feature module.
+    val b = "${featureSrc(c, "commonMain")}/$s"
+    // Client-only code (Compose, Ktor client) goes in feature/client; the server never depends on it.
+    val ub = "${featureSrc(c, "clientMain")}/$s"
     val arrow = c.lib("arrow")
     val imports = todoResultImports(c)
     fun r(t: String) = todoResult(c, t)
@@ -154,7 +158,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             fun Todo.toDto() = TodoDto(id.toString(), title, done)
             fun TodoDto.toDomain() = Todo(TodoId.parse(id), title, done)
         """.trimIndent()
-    f["$b/data/HttpTodoRepository.kt"] = """
+    f["$ub/data/HttpTodoRepository.kt"] = """
             package $p.data
 
             import io.ktor.client.HttpClient
@@ -214,7 +218,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
         """.trimIndent()
 
     // ----- tests: use cases against an in-memory fake -----
-    val tb = "core/src/commonTest/kotlin/${c.dir}/features/$s"
+    val tb = "${featureSrc(c, "commonTest")}/$s"
     f["$tb/FakeTodoRepository.kt"] = """
             package $p
 
@@ -388,7 +392,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
 
             import androidx.compose.runtime.Composable
             import ${c.pkg}.core.defaultServerUrl
-            import ${c.pkg}.ui.Feature
+            import ${featuresPkg(c)}.Feature
             import $p.data.HttpTodoRepository
             import $p.domain.AddTodoUseCase
             import $p.domain.DeleteTodoUseCase
@@ -412,9 +416,9 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
 /** Server side of the Todo sample: MongoDB adapter + HTTP routes. */
 fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
     val s = TODO_SLICE
-    val p = "${c.pkg}.features.$s"
-    val tp = "${c.appPkg("server")}.$s"
-    val td = "server/src/main/kotlin/${c.appDir("server")}/$s"
+    val p = "${featuresPkg(c)}.$s"
+    val tp = "$p.server"
+    val td = "${featureSrc(c, "serverMain")}/$s/server"
     val arrow = c.lib("arrow")
     f["$td/MongoTodoRepository.kt"] = """
             package $tp

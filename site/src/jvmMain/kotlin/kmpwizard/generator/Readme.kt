@@ -14,28 +14,32 @@ fun readme(c: ProjectContext) = buildString {
     appendLine("Follows the [recommended KMP project structure](https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html):")
     appendLine("entry points are separate modules, shared code is split into logic and UI.\n")
     appendLine("```")
-    appendLine("core/                       shared by clients and server, no UI")
-    appendLine("  src/commonMain/kotlin/${c.dir}/")
-    appendLine("    core/                   shared kernel (logging, errors)")
-    appendLine("    features/<slice>/")
-    appendLine("      domain/               entities, repository interfaces, use cases (no framework imports)")
-    appendLine("      data/                 repository implementations")
+    appendLine("core/                       shared kernel used by every slice (logging, errors), no UI")
+    appendLine("feature/                    one package per vertical slice, <pkg>.features.<slice>, split by where it runs")
+    appendLine("  shared/                   KMP, every target")
+    appendLine("    domain/                 entities, repository interfaces, use cases (no framework imports)")
+    appendLine("    data/                   repository implementations, wire DTOs")
+    if (c.hasUi) {
+        appendLine("  client/                   KMP + Compose, client targets only")
+        appendLine("    presentation/           UI state + Compose screens")
+        appendLine("    <Slice>Feature.kt       slice composition root for the app shell")
+    }
+    if (c.has(Target.SERVER)) {
+        appendLine("  server/                   JVM, server only")
+        appendLine("    server/                 Ktor routes + server-only adapters")
+    }
     if (c.hasUi) {
         appendLine("app/")
-        appendLine("  sharedUI/                 Compose Multiplatform, depends on core")
-        appendLine("    src/commonMain/kotlin/${c.dir}/")
-        appendLine("      ui/                   app shell: App, Feature, AppFeatures (registry of slices)")
-        appendLine("      features/<slice>/")
-        appendLine("        presentation/       UI state + Compose screens")
-        appendLine("        <Slice>Feature.kt   slice composition root")
+        appendLine("  sharedUI/                 Compose app shell (App, AppFeatures: registry of slices), depends on feature/client")
         if (c.has(kmpwizard.Target.ANDROID)) appendLine("  androidApp/               Android entry point")
         if (c.has(kmpwizard.Target.DESKTOP)) appendLine("  desktopApp/               desktop (JVM) entry point")
         if (c.has(kmpwizard.Target.WEB)) appendLine("  webApp/                   web entry point (JS + Wasm, shared webMain)")
         if (c.has(kmpwizard.Target.IOS)) appendLine("  iosApp/                   Xcode host app, imports the `$IOS_FRAMEWORK` framework")
     }
-    if (c.has(kmpwizard.Target.SERVER)) appendLine("server/                     Ktor server, depends on core only")
+    if (c.has(kmpwizard.Target.SERVER)) appendLine("server/                     Ktor bootstrap (config, plugins, wiring), depends on feature/server")
     appendLine("```")
-    appendLine("Dependency rule: presentation -> domain <- data. Slices must not import each other; share through `core`.\n")
+    appendLine("Dependency rule: presentation -> domain <- data <- server. Slices must not import each other; share through `core`.\n")
+    appendLine("A slice keeps one package across `feature/shared`, `feature/client` and `feature/server`, so the apps carry no server code and the server no Compose.\n")
     appendLine("Platform entry points use the package `${c.pkg}.app.<platform>`.")
     if (c.has(kmpwizard.Target.SERVER)) {
         appendLine("The server exposes each slice over HTTP (`GET /api/<slice>`).")
@@ -43,9 +47,9 @@ fun readme(c: ProjectContext) = buildString {
     }
     if (c.todo) {
         appendLine("\n## Todo sample")
-        appendLine("The `$TODO_SLICE` slice is a full round trip: Compose screen -> use cases -> `HttpTodoRepository` (Ktor client, in core)")
+        appendLine("The `$TODO_SLICE` slice is a full round trip: Compose screen -> use cases -> `HttpTodoRepository` (Ktor client)")
         appendLine("-> `/api/$TODO_SLICE` on the server -> use cases -> `MongoTodoRepository` (server only) -> MongoDB.")
-        appendLine("Clients and server share the domain, use cases and wire DTOs from `core`.\n")
+        appendLine("All of it lives in package `${c.pkg}.features.$TODO_SLICE` under `feature/`; clients and server share its domain, use cases and wire DTOs from `feature/shared`.\n")
         appendLine("1. Start MongoDB: `docker compose up -d` (or set `MONGODB_URI` to your own instance).")
         appendLine("2. Start the server: `./gradlew :server:run`.")
         appendLine("3. Run any client and open the Todo tab. Clients use `http://localhost:$SERVER_PORT`; the Android emulator uses `http://10.0.2.2:$SERVER_PORT`.")

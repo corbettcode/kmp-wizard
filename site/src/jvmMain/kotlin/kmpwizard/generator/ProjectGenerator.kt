@@ -20,10 +20,14 @@ import kotlin.io.path.*
  * Generated project layout follows
  * https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html
  *
- *   core/            code shared by clients and server: each slice's domain + data (no UI)
- *   app/sharedUI/    Compose Multiplatform shell + each slice's presentation (exports the iOS framework)
+ *   core/            shared kernel for every slice: logging, errors (no UI)
+ *   feature/         one package per vertical slice, split by where it runs:
+ *     shared/        domain + data (KMP, every target)
+ *     client/        presentation + client adapters (KMP + Compose)
+ *     server/        Ktor routes + server adapters (JVM)
+ *   app/sharedUI/    Compose Multiplatform shell that renders the slices (exports the iOS framework)
  *   app/androidApp/  app/desktopApp/  app/webApp/  app/iosApp/   entry points
- *   server/          Ktor server, depends on :core only
+ *   server/          Ktor bootstrap, depends on :feature:server
  */
 
 /**
@@ -48,6 +52,7 @@ class ProjectGenerator {
         val files = linkedMapOf<String, String>()
         rootFiles(c, files)
         coreModule(c, files)
+        featureModules(c, files)
         if (c.hasUi) sharedUiModule(c, files)
         spec.slices.forEach { slice(c, it, files) }
         if (c.todo) todoSample(c, files)
@@ -124,6 +129,7 @@ class ProjectGenerator {
     private fun rootFiles(c: ProjectContext, f: MutableMap<String, String>) {
         val mods = buildList {
             add(":core")
+            addAll(featureModulePaths(c))
             if (c.hasUi) add(":app:sharedUI")
             if (c.has(Target.ANDROID)) add(":app:androidApp")
             if (c.has(Target.DESKTOP)) add(":app:desktopApp")
@@ -285,12 +291,12 @@ class ProjectGenerator {
         plugins.forEach { (alias, p) -> appendLine("$alias = { id = \"${p.first}\", version.ref = \"${p.second}\" }") }
     }
 
-    // ---------- app/sharedUI: Compose shell + each slice's presentation ----------
+    // ---------- app/sharedUI: Compose shell that renders each slice's Feature ----------
 
     private fun sharedUiModule(c: ProjectContext, f: MutableMap<String, String>) {
         val deps = linkedMapOf(
             "commonMain" to listOf(
-                "api(projects.core)",
+                "api(projects.feature.client)",
                 "api(libs.compose.runtime)",
                 "api(libs.compose.ui)",
                 "implementation(libs.compose.foundation)",
@@ -306,21 +312,11 @@ class ProjectGenerator {
         )
 
         val base = "app/sharedUI/src/commonMain/kotlin/${c.dir}/ui"
-        f["$base/Feature.kt"] = """
-            package ${c.pkg}.ui
-
-            import androidx.compose.runtime.Composable
-
-            /** A vertical slice's entry point into the app shell. */
-            interface Feature {
-                val title: String
-                @Composable fun Content()
-            }
-        """.trimIndent()
         val names = c.allSlices.map { it.replaceFirstChar(Char::uppercase) }
         f["$base/AppFeatures.kt"] = buildString {
             appendLine("package ${c.pkg}.ui\n")
-            c.allSlices.zip(names).forEach { (s, x) -> appendLine("import ${c.pkg}.features.$s.${x}Feature") }
+            appendLine("import ${featuresPkg(c)}.Feature")
+            c.allSlices.zip(names).forEach { (s, x) -> appendLine("import ${featuresPkg(c)}.$s.${x}Feature") }
             appendLine("\nval features: List<Feature> = listOf(${names.joinToString { it + "Feature" }})")
         }
         f["$base/App.kt"] = """
@@ -361,128 +357,6 @@ class ProjectGenerator {
             import ${c.pkg}.ui.App
 
             fun MainViewController() = ComposeUIViewController { App() }
-        """.trimIndent()
-    }
-
-    // ---------- one vertical slice: domain + data in core, presentation in app/sharedUI ----------
-
-    private fun slice(c: ProjectContext, s: String, f: MutableMap<String, String>) {
-        val x = s.replaceFirstChar(Char::uppercase)
-        val p = "${c.pkg}.features.$s"
-        val b = "core/src/commonMain/kotlin/${c.dir}/features/$s"
-        val ub = "app/sharedUI/src/commonMain/kotlin/${c.dir}/features/$s"
-        val arrow = c.lib("arrow")
-
-        f["$b/domain/${x}Item.kt"] = "package $p.domain\n\ndata class ${x}Item(val id: String, val title: String)\n"
-        f["$b/domain/${x}Repository.kt"] =
-            "package $p.domain\n\ninterface ${x}Repository {\n    suspend fun all(): List<${x}Item>\n}\n"
-        f["$b/domain/Get${x}ItemsUseCase.kt"] = if (arrow) """
-            package $p.domain
-
-            import arrow.core.Either
-            import ${c.pkg}.core.DomainError
-
-            class Get${x}ItemsUseCase(private val repository: ${x}Repository) {
-                suspend operator fun invoke(): Either<DomainError, List<${x}Item>> =
-                    Either.catch { repository.all() }.mapLeft { DomainError.Unexpected(it.message ?: "unknown") }
-            }
-        """.trimIndent() else """
-            package $p.domain
-
-            class Get${x}ItemsUseCase(private val repository: ${x}Repository) {
-                suspend operator fun invoke(): Result<List<${x}Item>> = runCatching { repository.all() }
-            }
-        """.trimIndent()
-        f["$b/data/InMemory${x}Repository.kt"] = """
-            package $p.data
-
-            import $p.domain.${x}Item
-            import $p.domain.${x}Repository
-
-            class InMemory${x}Repository : ${x}Repository {
-                override suspend fun all() = listOf(${x}Item("1", "First $s item"), ${x}Item("2", "Second $s item"))
-            }
-        """.trimIndent()
-        val fold = if (arrow) "getItems().fold({ ${x}UiState.Error(it.toString()) }, { ${x}UiState.Loaded(it) })"
-        else "getItems().fold(onSuccess = { ${x}UiState.Loaded(it) }, onFailure = { ${x}UiState.Error(it.message ?: \"error\") })"
-        if (c.hasUi) f["$ub/presentation/${x}Screen.kt"] = """
-            package $p.presentation
-
-            import androidx.compose.foundation.layout.Column
-            import androidx.compose.material3.Text
-            import androidx.compose.runtime.Composable
-            import androidx.compose.runtime.LaunchedEffect
-            import androidx.compose.runtime.getValue
-            import androidx.compose.runtime.mutableStateOf
-            import androidx.compose.runtime.remember
-            import androidx.compose.runtime.setValue
-            import ${c.pkg}.core.logging.AppLogger
-            import $p.domain.Get${x}ItemsUseCase
-            import $p.domain.${x}Item
-
-            sealed interface ${x}UiState {
-                data object Loading : ${x}UiState
-                data class Loaded(val items: List<${x}Item>) : ${x}UiState
-                data class Error(val message: String) : ${x}UiState
-            }
-
-            @Composable
-            fun ${x}Screen(getItems: Get${x}ItemsUseCase) {
-                var state by remember { mutableStateOf<${x}UiState>(${x}UiState.Loading) }
-                LaunchedEffect(Unit) {
-                    state = $fold
-                    AppLogger.d { "$s slice loaded" }
-                }
-                when (val s = state) {
-                    ${x}UiState.Loading -> Text("Loading…")
-                    is ${x}UiState.Loaded -> Column { s.items.forEach { Text(it.title) } }
-                    is ${x}UiState.Error -> Text(s.message)
-                }
-            }
-        """.trimIndent()
-        // Slice composition root: the only place that knows the concrete data layer.
-        if (c.hasUi) f["$ub/${x}Feature.kt"] = """
-            package $p
-
-            import androidx.compose.runtime.Composable
-            import ${c.pkg}.ui.Feature
-            import $p.data.InMemory${x}Repository
-            import $p.domain.Get${x}ItemsUseCase
-            import $p.presentation.${x}Screen
-
-            object ${x}Feature : Feature {
-                override val title = "$x"
-                private val getItems = Get${x}ItemsUseCase(InMemory${x}Repository())
-                @Composable override fun Content() = ${x}Screen(getItems)
-            }
-        """.trimIndent()
-        f["core/src/commonTest/kotlin/${c.dir}/features/$s/Get${x}ItemsUseCaseTest.kt"] = if (c.lib("kotest")) """
-            package $p
-
-            import $p.data.InMemory${x}Repository
-            import $p.domain.Get${x}ItemsUseCase
-            import io.kotest.core.spec.style.StringSpec
-            import io.kotest.matchers.collections.shouldNotBeEmpty
-
-            class Get${x}ItemsUseCaseTest : StringSpec({
-                "returns items" {
-                    Get${x}ItemsUseCase(InMemory${x}Repository())().getOrNull()!!.shouldNotBeEmpty()
-                }
-            })
-        """.trimIndent() else """
-            package $p
-
-            import $p.data.InMemory${x}Repository
-            import $p.domain.Get${x}ItemsUseCase
-            import kotlinx.coroutines.test.runTest
-            import kotlin.test.Test
-            import kotlin.test.assertTrue
-
-            class Get${x}ItemsUseCaseTest {
-                @Test fun returnsItems() = runTest {
-                    assertTrue(Get${x}ItemsUseCase(InMemory${x}Repository())().getOrNull()!!.isNotEmpty())
-                }
-            }
         """.trimIndent()
     }
 
@@ -673,7 +547,7 @@ class ProjectGenerator {
         """.trimIndent() else ""
     }
 
-    // ---------- server: Ktor app reusing each slice's domain + data from core ----------
+    // ---------- server: Ktor bootstrap; each slice's routes come from its server package in :feature:server ----------
 
     private fun server(c: ProjectContext, f: MutableMap<String, String>) {
         val sp = c.appPkg("server")
@@ -690,7 +564,7 @@ class ProjectGenerator {
             application { mainClass.set("$sp.ApplicationKt") }
 
             dependencies {
-                implementation(projects.core)
+                implementation(projects.feature.server)
                 implementation(libs.ktor.server.core)
                 implementation(libs.ktor.server.netty)
                 implementation(libs.ktor.server.content.negotiation)
@@ -721,9 +595,10 @@ class ProjectGenerator {
                 appendLine("import io.ktor.server.application.ApplicationStopped")
                 appendLine("import io.ktor.server.plugins.cors.routing.CORS")
                 appendLine("import com.mongodb.kotlin.client.coroutine.MongoClient")
-                appendLine("import $sp.todo.MongoTodoRepository")
-                appendLine("import $sp.todo.todoRoutes")
+                appendLine("import ${featuresPkg(c)}.$TODO_SLICE.server.MongoTodoRepository")
+                appendLine("import ${featuresPkg(c)}.$TODO_SLICE.server.todoRoutes")
             }
+            slices.forEach { (s, _) -> appendLine("import ${featuresPkg(c)}.$s.server.${s}Routes") }
             if (flyway) FlywayGenerator.applicationImports(c).forEach(::appendLine)
             appendLine("\n/** Port, host and modules come from src/main/resources/application.conf. */")
             appendLine("fun main(args: Array<String>) = EngineMain.main(args)\n")
@@ -750,44 +625,6 @@ class ProjectGenerator {
             if (c.todo) appendLine("        todoRoutes(todos)")
             appendLine("    }")
             appendLine("}")
-        }
-        f["server/src/main/kotlin/$sd/ItemDto.kt"] = """
-            package $sp
-
-            import kotlinx.serialization.Serializable
-
-            /** Wire format for slice items. Keeps serialization out of the domain layer. */
-            @Serializable
-            data class ItemDto(val id: String, val title: String)
-        """.trimIndent()
-        val arrow = c.lib("arrow")
-        slices.forEach { (s, x) ->
-            val p = "${c.pkg}.features.$s"
-            val ok = "call.respond(items.map { ItemDto(it.id, it.title) })"
-            f["server/src/main/kotlin/$sd/${x}Routes.kt"] = buildString {
-                appendLine("package $sp\n")
-                appendLine("import io.ktor.http.HttpStatusCode")
-                appendLine("import io.ktor.server.response.respond")
-                appendLine("import io.ktor.server.routing.Route")
-                appendLine("import io.ktor.server.routing.get")
-                appendLine("import $p.data.InMemory${x}Repository")
-                appendLine("import $p.domain.Get${x}ItemsUseCase")
-                appendLine("\n/** HTTP adapter for the `$s` slice: GET /api/$s */")
-                appendLine("fun Route.${s}Routes() {")
-                appendLine("    val getItems = Get${x}ItemsUseCase(InMemory${x}Repository())")
-                appendLine("    get(\"/api/$s\") {")
-                appendLine("        getItems().fold(")
-                if (arrow) {
-                    appendLine("            { call.respond(HttpStatusCode.InternalServerError, it.toString()) },")
-                    appendLine("            { items -> $ok },")
-                } else {
-                    appendLine("            onSuccess = { items -> $ok },")
-                    appendLine("            onFailure = { call.respond(HttpStatusCode.InternalServerError, it.message ?: \"error\") },")
-                }
-                appendLine("        )")
-                appendLine("    }")
-                appendLine("}")
-            }
         }
         if (c.todo) todoServer(c, f)
         if (flyway) FlywayGenerator.files(c, f)
