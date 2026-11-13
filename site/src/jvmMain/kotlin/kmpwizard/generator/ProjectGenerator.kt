@@ -203,7 +203,9 @@ class ProjectGenerator {
         val services = buildList {
             if (c.todo) add("Todo sample" to ("""
                 mongo:
-                  image: mongo:8
+                  # The 8.0 long-term-support line. Newer 8.x images (8.3) refuse to start on
+                  # Linux kernels 6.19-7.0.13 (MongoDB SERVER-121912 / SERVER-136848).
+                  image: mongo:8.0
                   ports:
                     - "27017:27017"
                   volumes:
