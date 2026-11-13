@@ -145,14 +145,24 @@ object FlywayGenerator {
             import org.flywaydb.core.Flyway
 
             /** Connection settings for the SQL database. */
-            data class DatabaseConfig(val url: String, val user: String, val password: String) {
+            data class DatabaseConfig(
+                val url: String
+                , val user: String
+                , val password: String
+            ) {
                 companion object {
                     /** Reads the `database` block of application.conf. */
-                    fun from(config: ApplicationConfig) = DatabaseConfig(
-                        url = config.property("url").getString(),
-                        user = config.property("user").getString(),
-                        password = config.property("password").getString(),
+                    fun from(
+                        config: ApplicationConfig
+                    ) = DatabaseConfig(
+                        url = config.string("url")
+                        , user = config.string("user")
+                        , password = config.string("password")
                     )
+
+                    private fun ApplicationConfig.string(
+                        path: String
+                    ) = property(path).getString()
                 }
             }
 
@@ -160,13 +170,15 @@ object FlywayGenerator {
              * Applies pending migrations from `src/main/resources/db/migration` (files named `V<n>__<description>.sql`)
              * and returns how many ran. Already-applied migrations are skipped, so this is safe on every start.
              */
-            fun migrate(db: DatabaseConfig): Int =
-                Flyway.configure()
-                    .dataSource(db.url, db.user, db.password)
-                    .locations("classpath:db/migration")
-                    .load()
-                    .migrate()
-                    .migrationsExecuted
+            fun migrate(
+                db: DatabaseConfig
+            ): Int = Flyway
+                .configure()
+                .dataSource(db.url, db.user, db.password)
+                .locations("classpath:db/migration")
+                .load()
+                .migrate()
+                .migrationsExecuted
         """.trimIndent() + "\n"
         f["server/src/main/resources/db/migration/V1__create_app_setting.sql"] = """
             -- First migration. Flyway applies the files in db/migration in version order (V1, V2, ...)
@@ -186,16 +198,24 @@ object FlywayGenerator {
             import io.ktor.server.config.mergeWith
 
             /** In-memory H2 in PostgreSQL mode: runs the real migrations without a database server. */
-            fun testDatabase(name: String) = DatabaseConfig("${h2Url("\$name")}", "sa", "")
+            fun testDatabase(
+                name: String
+            ) = DatabaseConfig(
+                "${h2Url("\$name")}"
+                , "sa"
+                , ""
+            )
 
             /** This config with its `database` block pointing at an in-memory H2 database. */
-            fun ApplicationConfig.withTestDatabase(name: String = "app"): ApplicationConfig {
+            fun ApplicationConfig.withTestDatabase(
+                name: String = "app"
+            ): ApplicationConfig {
                 val db = testDatabase(name)
                 return mergeWith(
                     MapApplicationConfig(
-                        "database.url" to db.url,
-                        "database.user" to db.user,
-                        "database.password" to db.password,
+                        "database.url" to db.url
+                        , "database.user" to db.user
+                        , "database.password" to db.password
                     )
                 )
             }
@@ -212,12 +232,17 @@ object FlywayGenerator {
                 @Test fun migrationsApplyToAnEmptyDatabase() {
                     val db = testDatabase("migrations-fresh")
                     assertTrue(migrate(db) > 0)
-                    DriverManager.getConnection(db.url, db.user, db.password).use { conn ->
-                        conn.createStatement().executeQuery("SELECT setting FROM app_setting WHERE name = 'schema.owner'").use {
-                            assertTrue(it.next())
-                            assertEquals("flyway", it.getString(1))
+                    DriverManager
+                        .getConnection(db.url, db.user, db.password)
+                        .use { conn ->
+                            conn
+                                .createStatement()
+                                .executeQuery("SELECT setting FROM app_setting WHERE name = 'schema.owner'")
+                                .use {
+                                    assertTrue(it.next())
+                                    assertEquals("flyway", it.getString(1))
+                                }
                         }
-                    }
                 }
 
                 @Test fun migratingTwiceAppliesNothingTheSecondTime() {

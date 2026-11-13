@@ -79,7 +79,13 @@ fun kmpBuildScript(
         appendLine("        }")
     }
     appendLine("    }\n}")
-    if (usesJUnit) appendLine("\ntasks.withType<Test>().configureEach { useJUnitPlatform() }")
+    if (usesJUnit) {
+        appendLine("\ntasks")
+        appendLine("    .withType<Test>()")
+        appendLine("    .configureEach {")
+        appendLine("        useJUnitPlatform()")
+        appendLine("    }")
+    }
     // Compose hooks a check onto every web browser test task that fails unless the target is an executable
     // (CMP-4906), even when the module has no tests, which breaks `./gradlew allTests`.
     if (hasCompose && c.has(Target.WEB) && deps.keys.none { it.endsWith("Test") }) {
@@ -87,9 +93,12 @@ fun kmpBuildScript(
             "\n// No tests here yet. Compose's web UI-test check (CMP-4906) needs an executable target and would fail"
         )
         appendLine("// `allTests`; remove this when adding Compose UI tests, and bundle them as that check describes.")
-        appendLine(
-            "tasks.matching { it.name.startsWith(\"checkComposeUiTestConfigurationFor\") }" +
-                ".configureEach { enabled = false }"
-        )
+        appendLine("tasks")
+        appendLine("    .matching {")
+        appendLine("        it.name.startsWith(\"checkComposeUiTestConfigurationFor\")")
+        appendLine("    }")
+        appendLine("    .configureEach {")
+        appendLine("        enabled = false")
+        appendLine("    }")
     }
 }

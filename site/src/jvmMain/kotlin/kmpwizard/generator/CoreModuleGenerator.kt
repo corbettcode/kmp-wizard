@@ -43,27 +43,35 @@ fun coreModule(
             import co.touchlab.kermit.Logger
 
             object AppLogger {
-                fun d(message: () -> String) = Logger.withTag("App").d { message() }
+                fun d(
+                    message: () -> String
+                ) = Logger
+                    .withTag("App")
+                    .d {
+                        message()
+                    }
             }
         """.trimIndent() else """
             package ${c.pkg}.core.logging
 
             object AppLogger {
-                fun d(message: () -> String) = println(message())
+                fun d(
+                    message: () -> String
+                ) = println(message())
             }
         """.trimIndent()
     // The Todo sample's use cases also report invalid input and unknown ids.
-    val todoErrors = "    data class Invalid(override val message: String) : DomainError\n" +
-        "    data class NotFound(override val message: String) : DomainError\n"
-    if (c.lib("arrow")) f["$base/core/DomainError.kt"] = """
-            package ${c.pkg}.core
-
-            sealed interface DomainError {
-                val message: String
-                data class Unexpected(override val message: String) : DomainError
-            }
-        """.trimIndent()
-        .let {
-            if (c.hasTodo) it.replace("    data class Unexpected", todoErrors + "    data class Unexpected") else it
+    val errorCases = if (c.hasTodo) listOf("Invalid", "NotFound", "Unexpected") else listOf("Unexpected")
+    if (c.lib("arrow")) f["$base/core/DomainError.kt"] = buildString {
+        appendLine("package ${c.pkg}.core\n")
+        appendLine("sealed interface DomainError {")
+        appendLine("    val message: String")
+        errorCases.forEach {
+            appendLine()
+            appendLine("    data class $it(")
+            appendLine("        override val message: String")
+            appendLine("    ) : DomainError")
         }
+        append("}")
+    }
 }

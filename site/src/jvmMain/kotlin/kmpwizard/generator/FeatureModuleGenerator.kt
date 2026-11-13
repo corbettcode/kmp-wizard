@@ -249,7 +249,14 @@ fun slice(
     val hasArrow = c.lib("arrow")
 
     // ----- domain -----
-    f["$b/domain/${x}Item.kt"] = "package $p.domain\n\ndata class ${x}Item(val id: String, val title: String)\n"
+    f["$b/domain/${x}Item.kt"] = """
+        package $p.domain
+
+        data class ${x}Item(
+            val id: String
+            , val title: String
+        )
+    """.trimIndent() + "\n"
     f["$b/domain/${x}Repository.kt"] =
         "package $p.domain\n\ninterface ${x}Repository {\n    suspend fun all(): List<${x}Item>\n}\n"
     f["$b/domain/Get${x}ItemsUseCase.kt"] = if (hasArrow) """
@@ -258,14 +265,23 @@ fun slice(
         import arrow.core.Either
         import ${c.pkg}.core.DomainError
 
-        class Get${x}ItemsUseCase(private val repository: ${x}Repository) {
-            suspend operator fun invoke(): Either<DomainError, List<${x}Item>> =
-                Either.catch { repository.all() }.mapLeft { DomainError.Unexpected(it.message ?: "unknown") }
+        class Get${x}ItemsUseCase(
+            private val repository: ${x}Repository
+        ) {
+            suspend operator fun invoke(): Either<DomainError, List<${x}Item>> = Either
+                .catch {
+                    repository.all()
+                }
+                .mapLeft {
+                    DomainError.Unexpected(it.message ?: "unknown")
+                }
         }
     """.trimIndent() else """
         package $p.domain
 
-        class Get${x}ItemsUseCase(private val repository: ${x}Repository) {
+        class Get${x}ItemsUseCase(
+            private val repository: ${x}Repository
+        ) {
             suspend operator fun invoke(): Result<List<${x}Item>> = runCatching { repository.all() }
         }
     """.trimIndent()
@@ -284,10 +300,11 @@ fun slice(
 
     // ----- presentation -----
     if (c.hasUi) {
-        val fold =
-            if (hasArrow) "getItems().fold({ ${x}UiState.Error(it.toString()) }, { ${x}UiState.Loaded(it) })"
-            else "getItems().fold(onSuccess = { ${x}UiState.Loaded(it) }, " +
-                "onFailure = { ${x}UiState.Error(it.message ?: \"error\") })"
+        val fold = foldCall(
+            hasArrow
+            , onFailure = "${x}UiState.Error(${if (hasArrow) "it.toString()" else "it.message ?: \"error\""})"
+            , onSuccess = "${x}UiState.Loaded(it)"
+        )
         f["$cb/presentation/${x}Screen.kt"] = """
             package $p.presentation
 
@@ -305,15 +322,22 @@ fun slice(
 
             sealed interface ${x}UiState {
                 data object Loading : ${x}UiState
-                data class Loaded(val items: List<${x}Item>) : ${x}UiState
-                data class Error(val message: String) : ${x}UiState
+                data class Loaded(
+                    val items: List<${x}Item>
+                ) : ${x}UiState
+
+                data class Error(
+                    val message: String
+                ) : ${x}UiState
             }
 
             @Composable
-            fun ${x}Screen(getItems: Get${x}ItemsUseCase) {
+            fun ${x}Screen(
+                getItems: Get${x}ItemsUseCase
+            ) {
                 var state by remember { mutableStateOf<${x}UiState>(${x}UiState.Loading) }
                 LaunchedEffect(Unit) {
-                    state = $fold
+                    state = getItems().${fold.indentContinuation(20)}
                     AppLogger.d { "$s slice loaded" }
                 }
                 when (val s = state) {
@@ -352,11 +376,19 @@ fun slice(
 
             /** Wire format of /api/$s. Keeps serialization out of the domain layer. */
             @Serializable
-            data class ${x}ItemDto(val id: String, val title: String)
+            data class ${x}ItemDto(
+                val id: String
+                , val title: String
+            )
 
             fun ${x}Item.toDto() = ${x}ItemDto(id, title)
         """.trimIndent()
-        val ok = "call.respond(items.map { it.toDto() })"
+        val fold = foldCall(
+            hasArrow
+            , onFailure = "call.respond(HttpStatusCode.InternalServerError, " +
+                "${if (hasArrow) "it.toString()" else "it.message ?: \"error\""})"
+            , onSuccess = "items -> call.respond(items.map { it.toDto() })"
+        )
         f["$sb/${x}Routes.kt"] = buildString {
             appendLine("package $p.server\n")
             appendLine("import io.ktor.http.HttpStatusCode")
@@ -369,18 +401,7 @@ fun slice(
             appendLine("fun Route.${s}Routes() {")
             appendLine("    val getItems = Get${x}ItemsUseCase(InMemory${x}Repository())")
             appendLine("    get(\"/api/$s\") {")
-            appendLine("        getItems().fold(")
-            if (hasArrow) {
-                appendLine("            { call.respond(HttpStatusCode.InternalServerError, it.toString()) },")
-                appendLine("            { items -> $ok },")
-            } else {
-                appendLine("            onSuccess = { items -> $ok },")
-                appendLine(
-                    "            onFailure = { call.respond(HttpStatusCode.InternalServerError, " +
-                        "it.message ?: \"error\") },"
-                )
-            }
-            appendLine("        )")
+            appendLine("        getItems().${fold.indentContinuation(8)}")
             appendLine("    }")
             appendLine("}")
         }
@@ -397,7 +418,9 @@ fun slice(
 
         class Get${x}ItemsUseCaseTest : StringSpec({
             "returns items" {
-                Get${x}ItemsUseCase(InMemory${x}Repository())().getOrNull()!!.shouldNotBeEmpty()
+                Get${x}ItemsUseCase(InMemory${x}Repository())()
+                    .getOrNull()!!
+                    .shouldNotBeEmpty()
             }
         })
     """.trimIndent() else """
@@ -411,7 +434,8 @@ fun slice(
 
         class Get${x}ItemsUseCaseTest {
             @Test fun returnsItems() = runTest {
-                assertTrue(Get${x}ItemsUseCase(InMemory${x}Repository())().getOrNull()!!.isNotEmpty())
+                val items = Get${x}ItemsUseCase(InMemory${x}Repository())().getOrNull()!!
+                assertTrue(items.isNotEmpty())
             }
         }
     """.trimIndent()

@@ -5,6 +5,8 @@ import kmpwizard.generator.ProjectContext
 import kmpwizard.generator.SERVER_PORT
 import kmpwizard.generator.coreUiPkg
 import kmpwizard.generator.featureSrc
+import kmpwizard.generator.foldCall
+import kmpwizard.generator.indentContinuation
 import kmpwizard.generator.slicePkg
 
 // ---------- Todo sample: clients -> HTTP -> server -> MongoDB, sharing domain + DTOs via core ----------
@@ -54,8 +56,15 @@ fun todoSample(
         }
 
     // ----- domain -----
-    f["$b/domain/Todo.kt"] =
-        "package $p.domain\n\ndata class Todo(val id: TodoId, val title: String, val done: Boolean)\n"
+    f["$b/domain/Todo.kt"] = """
+            package $p.domain
+
+            data class Todo(
+                val id: TodoId
+                , val title: String
+                , val isDone: Boolean
+            )
+        """.trimIndent() + "\n"
     f["$b/domain/TodoId.kt"] = """
             @file:OptIn(ExperimentalUuidApi::class)
 
@@ -70,7 +79,9 @@ fun todoSample(
              * so ids sort by creation time (also in their string form).
              */
             @JvmInline
-            value class TodoId(val value: Uuid) {
+            value class TodoId(
+                val value: Uuid
+            ) {
                 override fun toString() = value.toString()
 
                 companion object {
@@ -78,10 +89,16 @@ fun todoSample(
                     fun generate() = TodoId(Uuid.generateV7())
 
                     /** Parses the hex-and-dash form; throws IllegalArgumentException if [text] is not a UUID. */
-                    fun parse(text: String) = TodoId(Uuid.parse(text))
+                    fun parse(
+                        text: String
+                    ) = TodoId(Uuid.parse(text))
 
                     /** Parses the hex-and-dash form; null if [text] is not a UUID. */
-                    fun parseOrNull(text: String) = Uuid.parseOrNull(text)?.let(::TodoId)
+                    fun parseOrNull(
+                        text: String
+                    ) = Uuid
+                        .parseOrNull(text)
+                        ?.let(::TodoId)
                 }
             }
         """.trimIndent()
@@ -90,11 +107,21 @@ fun todoSample(
 
             interface TodoRepository {
                 suspend fun all(): List<Todo>
-                suspend fun add(title: String): Todo
+
+                suspend fun add(
+                    title: String
+                ): Todo
+
                 /** Returns null when no todo has this id. */
-                suspend fun setDone(id: TodoId, done: Boolean): Todo?
+                suspend fun setDone(
+                    id: TodoId
+                    , isDone: Boolean
+                ): Todo?
+
                 /** Returns false when no todo has this id. */
-                suspend fun delete(id: TodoId): Boolean
+                suspend fun delete(
+                    id: TodoId
+                ): Boolean
             }
         """.trimIndent()
     f["$b/domain/Attempt.kt"] = if (hasArrow) """
@@ -104,8 +131,11 @@ fun todoSample(
             import ${c.pkg}.core.DomainError
 
             /** Runs [block], turning failures into [DomainError]s. */
-            internal inline fun <T> attempt(block: () -> T): Either<DomainError, T> =
-                Either.catch(block).mapLeft {
+            internal inline fun <T> attempt(
+                block: () -> T
+            ): Either<DomainError, T> = Either
+                .catch(block)
+                .mapLeft {
                     when (it) {
                         is IllegalArgumentException -> DomainError.Invalid(it.message ?: "invalid")
                         is NoSuchElementException -> DomainError.NotFound(it.message ?: "not found")
@@ -119,32 +149,49 @@ fun todoSample(
              * Runs [block], capturing failures.
              * IllegalArgumentException = invalid input, NoSuchElementException = unknown id.
              */
-            internal inline fun <T> attempt(block: () -> T): Result<T> = runCatching(block)
+            internal inline fun <T> attempt(
+                block: () -> T
+            ): Result<T> = runCatching(block)
         """.trimIndent()
     f["$b/domain/TodoUseCases.kt"] = """
             package $p.domain
 
             __IMPORTS__
 
-            class GetTodosUseCase(private val repository: TodoRepository) {
+            class GetTodosUseCase(
+                private val repository: TodoRepository
+            ) {
                 suspend operator fun invoke(): ${r("List<Todo>")} = attempt { repository.all() }
             }
 
-            class AddTodoUseCase(private val repository: TodoRepository) {
-                suspend operator fun invoke(title: String): ${r("Todo")} = attempt {
+            class AddTodoUseCase(
+                private val repository: TodoRepository
+            ) {
+                suspend operator fun invoke(
+                    title: String
+                ): ${r("Todo")} = attempt {
                     require(title.isNotBlank()) { "Title must not be blank" }
                     repository.add(title.trim())
                 }
             }
 
-            class SetTodoDoneUseCase(private val repository: TodoRepository) {
-                suspend operator fun invoke(id: TodoId, done: Boolean): ${r("Todo")} = attempt {
-                    repository.setDone(id, done) ?: throw NoSuchElementException("No todo with id ${'$'}id")
+            class SetTodoDoneUseCase(
+                private val repository: TodoRepository
+            ) {
+                suspend operator fun invoke(
+                    id: TodoId
+                    , isDone: Boolean
+                ): ${r("Todo")} = attempt {
+                    repository.setDone(id, isDone) ?: throw NoSuchElementException("No todo with id ${'$'}id")
                 }
             }
 
-            class DeleteTodoUseCase(private val repository: TodoRepository) {
-                suspend operator fun invoke(id: TodoId): ${r("Unit")} = attempt {
+            class DeleteTodoUseCase(
+                private val repository: TodoRepository
+            ) {
+                suspend operator fun invoke(
+                    id: TodoId
+                ): ${r("Unit")} = attempt {
                     if (!repository.delete(id)) throw NoSuchElementException("No todo with id ${'$'}id")
                 }
             }
@@ -162,16 +209,25 @@ fun todoSample(
 
             /** Wire format of /api/$s, used by both the HTTP client and the server. [id] is a UUID v7 string. */
             @Serializable
-            data class TodoDto(val id: String, val title: String, val done: Boolean)
+            data class TodoDto(
+                val id: String
+                , val title: String
+                , val isDone: Boolean
+            )
 
             @Serializable
-            data class NewTodoDto(val title: String)
+            data class NewTodoDto(
+                val title: String
+            )
 
             @Serializable
-            data class TodoPatchDto(val done: Boolean)
+            data class TodoPatchDto(
+                val isDone: Boolean
+            )
 
-            fun Todo.toDto() = TodoDto(id.toString(), title, done)
-            fun TodoDto.toDomain() = Todo(TodoId.parse(id), title, done)
+            fun Todo.toDto() = TodoDto(id.toString(), title, isDone)
+
+            fun TodoDto.toDomain() = Todo(TodoId.parse(id), title, isDone)
         """.trimIndent()
     f["$ub/data/HttpTodoRepository.kt"] = """
             package $p.data
@@ -200,31 +256,53 @@ fun todoSample(
             }
 
             /** Talks to the server's /api/$s endpoints. Ktor stays an implementation detail of core. */
-            class HttpTodoRepository internal constructor(private val client: HttpClient, baseUrl: String) : TodoRepository {
-                constructor(baseUrl: String) : this(todoHttpClient(), baseUrl)
+            class HttpTodoRepository internal constructor(
+                private val client: HttpClient
+                , baseUrl: String
+            ) : TodoRepository {
+                constructor(
+                    baseUrl: String
+                ) : this(todoHttpClient(), baseUrl)
 
                 private val url = "${'$'}baseUrl/api/$s"
 
-                override suspend fun all(): List<Todo> =
-                    client.get(url).body<List<TodoDto>>().map { it.toDomain() }
+                override suspend fun all(): List<Todo> = client
+                    .get(url)
+                    .body<List<TodoDto>>()
+                    .map {
+                        it.toDomain()
+                    }
 
-                override suspend fun add(title: String): Todo =
-                    client.post(url) {
+                override suspend fun add(
+                    title: String
+                ): Todo = client
+                    .post(url) {
                         contentType(ContentType.Application.Json)
                         setBody(NewTodoDto(title))
-                    }.body<TodoDto>().toDomain()
+                    }
+                    .body<TodoDto>()
+                    .toDomain()
 
-                override suspend fun setDone(id: TodoId, done: Boolean): Todo? = nullIfNotFound {
-                    client.patch("${'$'}url/${'$'}id") {
-                        contentType(ContentType.Application.Json)
-                        setBody(TodoPatchDto(done))
-                    }.body<TodoDto>().toDomain()
+                override suspend fun setDone(
+                    id: TodoId
+                    , isDone: Boolean
+                ): Todo? = nullIfNotFound {
+                    client
+                        .patch("${'$'}url/${'$'}id") {
+                            contentType(ContentType.Application.Json)
+                            setBody(TodoPatchDto(isDone))
+                        }
+                        .body<TodoDto>()
+                        .toDomain()
                 }
 
-                override suspend fun delete(id: TodoId): Boolean =
-                    nullIfNotFound { client.delete("${'$'}url/${'$'}id") } != null
+                override suspend fun delete(
+                    id: TodoId
+                ): Boolean = nullIfNotFound { client.delete("${'$'}url/${'$'}id") } != null
 
-                private inline fun <T> nullIfNotFound(block: () -> T): T? = try {
+                private inline fun <T> nullIfNotFound(
+                    block: () -> T
+                ): T? = try {
                     block()
                 } catch (e: ClientRequestException) {
                     if (e.response.status == HttpStatusCode.NotFound) null else throw e
@@ -245,9 +323,23 @@ fun todoSample(
                 private val todos = linkedMapOf<TodoId, Todo>()
 
                 override suspend fun all() = todos.values.toList()
-                override suspend fun add(title: String) = Todo(TodoId.generate(), title, false).also { todos[it.id] = it }
-                override suspend fun setDone(id: TodoId, done: Boolean) = todos[id]?.copy(done = done)?.also { todos[id] = it }
-                override suspend fun delete(id: TodoId) = todos.remove(id) != null
+
+                override suspend fun add(
+                    title: String
+                ) = Todo(TodoId.generate(), title, false).also { todos[it.id] = it }
+
+                override suspend fun setDone(
+                    id: TodoId
+                    , isDone: Boolean
+                ) = todos[id]
+                    ?.copy(isDone = isDone)
+                    ?.also {
+                        todos[id] = it
+                    }
+
+                override suspend fun delete(
+                    id: TodoId
+                ) = todos.remove(id) != null
             }
         """.trimIndent()
     f["$tb/TodoUseCasesTest.kt"] = if (c.lib("kotest")) """
@@ -265,13 +357,22 @@ fun todoSample(
                 "added todos are listed" {
                     val repo = FakeTodoRepository()
                     AddTodoUseCase(repo)("  Buy milk ")
-                    GetTodosUseCase(repo)().getOrNull()!!.map { it.title } shouldBe listOf("Buy milk")
+                    val titles = GetTodosUseCase(repo)()
+                        .getOrNull()!!
+                        .map {
+                            it.title
+                        }
+                    titles shouldBe listOf("Buy milk")
                 }
                 "blank titles are rejected" {
-                    AddTodoUseCase(FakeTodoRepository())(" ").getOrNull().shouldBeNull()
+                    AddTodoUseCase(FakeTodoRepository())(" ")
+                        .getOrNull()
+                        .shouldBeNull()
                 }
                 "marking an unknown todo fails" {
-                    SetTodoDoneUseCase(FakeTodoRepository())(TodoId.generate(), true).getOrNull().shouldBeNull()
+                    SetTodoDoneUseCase(FakeTodoRepository())(TodoId.generate(), true)
+                        .getOrNull()
+                        .shouldBeNull()
                 }
             })
         """.trimIndent() else """
@@ -290,7 +391,12 @@ fun todoSample(
                 @Test fun addedTodosAreListed() = runTest {
                     val repo = FakeTodoRepository()
                     AddTodoUseCase(repo)("  Buy milk ")
-                    assertEquals(listOf("Buy milk"), GetTodosUseCase(repo)().getOrNull()!!.map { it.title })
+                    val titles = GetTodosUseCase(repo)()
+                        .getOrNull()!!
+                        .map {
+                            it.title
+                        }
+                    assertEquals(listOf("Buy milk"), titles)
                 }
 
                 @Test fun blankTitlesAreRejected() = runTest {
@@ -306,9 +412,12 @@ fun todoSample(
     if (!c.hasUi) return
 
     // ----- presentation: TodoViewModel (from Koin) holds the state, TodoScreen renders it -----
-    val report =
-        if (hasArrow) "fold({ report(it.message); null }, { report(null); it })"
-        else "fold(onSuccess = { report(null); it }, onFailure = { report(it.message ?: \"error\"); null })"
+    val reportFailure = if (hasArrow) "report(it.message)" else "report(it.message ?: \"error\")"
+    val report = foldCall(
+        hasArrow
+        , onFailure = "$reportFailure\nnull"
+        , onSuccess = "report(null)\nit"
+    )
     f["$ub/presentation/TodoViewModel.kt"] = """
             package $p.presentation
 
@@ -331,10 +440,10 @@ fun todoSample(
             import $p.domain.TodoId
 
             data class TodoUiState(
-                val todos: List<Todo> = emptyList(),
-                val loading: Boolean = true,
+                val todos: List<Todo> = emptyList()
+                , val isLoading: Boolean = true
                 /** Last server error, cleared by the next successful call. */
-                val error: String? = null,
+                , val error: String? = null
             )
 
             /**
@@ -342,10 +451,10 @@ fun todoSample(
              * isn't reloaded each time the screen is shown. Work runs in [viewModelScope], cancelled when it's cleared.
              */
             class TodoViewModel(
-                private val getTodos: GetTodosUseCase,
-                private val addTodo: AddTodoUseCase,
-                private val setTodoDone: SetTodoDoneUseCase,
-                private val deleteTodo: DeleteTodoUseCase,
+                private val getTodos: GetTodosUseCase
+                , private val addTodo: AddTodoUseCase
+                , private val setTodoDone: SetTodoDoneUseCase
+                , private val deleteTodo: DeleteTodoUseCase
             ) : ViewModel() {
                 private val _state = MutableStateFlow(TodoUiState())
                 val state: StateFlow<TodoUiState> = _state.asStateFlow()
@@ -356,41 +465,61 @@ fun todoSample(
                 init { refresh() }
 
                 fun refresh() {
-                    _state.update { it.copy(loading = true) }
+                    _state.update { it.copy(isLoading = true) }
                     viewModelScope.launch {
                         val todos = getTodos().orReport()
-                        _state.update { it.copy(loading = false, todos = todos ?: it.todos) }
+                        _state.update {
+                            it.copy(
+                                isLoading = false
+                                , todos = todos ?: it.todos
+                            )
+                        }
                     }
                 }
 
                 fun add() {
                     val title = newTitle.takeIf { it.isNotBlank() } ?: return
                     viewModelScope.launch {
-                        addTodo(title).orReport()?.let { todo ->
-                            _state.update { it.copy(todos = it.todos + todo) }
-                            newTitle = ""
-                        }
+                        addTodo(title)
+                            .orReport()
+                            ?.let { todo ->
+                                _state.update { it.copy(todos = it.todos + todo) }
+                                newTitle = ""
+                            }
                     }
                 }
 
-                fun setDone(id: TodoId, done: Boolean) {
+                fun setDone(
+                    id: TodoId
+                    , isDone: Boolean
+                ) {
                     viewModelScope.launch {
-                        setTodoDone(id, done).orReport()?.let { updated ->
-                            _state.update { s -> s.copy(todos = s.todos.map { if (it.id == updated.id) updated else it }) }
-                        }
+                        setTodoDone(id, isDone)
+                            .orReport()
+                            ?.let { updated ->
+                                _state.update { s -> s.copy(todos = s.todos.map { if (it.id == updated.id) updated else it }) }
+                            }
                     }
                 }
 
-                fun delete(id: TodoId) {
+                fun delete(
+                    id: TodoId
+                ) {
                     viewModelScope.launch {
-                        deleteTodo(id).orReport()?.let { _state.update { s -> s.copy(todos = s.todos.filterNot { it.id == id }) } }
+                        deleteTodo(id)
+                            .orReport()
+                            ?.let {
+                                _state.update { s -> s.copy(todos = s.todos.filterNot { it.id == id }) }
+                            }
                     }
                 }
 
-                private fun report(error: String?) = _state.update { it.copy(error = error) }
+                private fun report(
+                    error: String?
+                ) = _state.update { it.copy(error = error) }
 
                 /** Shows a failure and returns null, or clears the error and returns the value. */
-                private fun <T> ${r("T")}.orReport(): T? = $report
+                private fun <T> ${r("T")}.orReport(): T? = ${report.indentContinuation(16)}
             }
         """.trimIndent()
         .replace("__IMPORTS__\n", imports)
@@ -416,32 +545,51 @@ fun todoSample(
             import androidx.compose.ui.unit.dp
 
             @Composable
-            fun TodoScreen(viewModel: TodoViewModel) {
+            fun TodoScreen(
+                viewModel: TodoViewModel
+            ) {
                 val state by viewModel.state.collectAsState()
 
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    Modifier.padding(16.dp)
+                    , verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                        , horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         OutlinedTextField(
-                            value = viewModel.newTitle,
-                            onValueChange = { viewModel.newTitle = it },
-                            label = { Text("New todo") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            value = viewModel.newTitle
+                            , onValueChange = { viewModel.newTitle = it }
+                            , label = { Text("New todo") }
+                            , singleLine = true
+                            , modifier = Modifier.weight(1f)
                         )
-                        Button(enabled = viewModel.newTitle.isNotBlank(), onClick = viewModel::add) { Text("Add") }
+                        Button(
+                            enabled = viewModel.newTitle.isNotBlank()
+                            , onClick = viewModel::add
+                        ) { Text("Add") }
                     }
-                    state.error?.let { Text("Server error: ${'$'}it", color = MaterialTheme.colorScheme.error) }
+                    state.error?.let {
+                        Text(
+                            "Server error: ${'$'}it"
+                            , color = MaterialTheme.colorScheme.error
+                        )
+                    }
                     when {
-                        state.loading -> Text("Loading…")
+                        state.isLoading -> Text("Loading…")
                         state.todos.isEmpty() -> Text("Nothing to do.")
                     }
                     state.todos.forEach { todo ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = todo.done, onCheckedChange = { viewModel.setDone(todo.id, it) })
+                            Checkbox(
+                                checked = todo.isDone
+                                , onCheckedChange = { viewModel.setDone(todo.id, it) }
+                            )
                             Text(
-                                todo.title,
-                                modifier = Modifier.weight(1f),
-                                textDecoration = if (todo.done) TextDecoration.LineThrough else null,
+                                todo.title
+                                , modifier = Modifier.weight(1f)
+                                , textDecoration = if (todo.isDone) TextDecoration.LineThrough else null
                             )
                             TextButton(onClick = { viewModel.delete(todo.id) }) { Text("Delete") }
                         }
@@ -522,44 +670,70 @@ fun todoServer(
              * Stores todos in the `todos` collection. Server-only data adapter for the `$s` slice.
              * `_id` holds the [TodoId] as a UUID v7 string, so sorting by `_id` sorts by creation time.
              */
-            class MongoTodoRepository(db: MongoDatabase) : TodoRepository {
+            class MongoTodoRepository(
+                db: MongoDatabase
+            ) : TodoRepository {
                 private val todos = db.getCollection<Document>("todos")
 
-                override suspend fun all(): List<Todo> =
-                    todos.find().sort(Sorts.ascending("_id")).map { it.toTodo() }.toList()
+                override suspend fun all(): List<Todo> = todos
+                    .find()
+                    .sort(Sorts.ascending("_id"))
+                    .map {
+                        it.toTodo()
+                    }
+                    .toList()
 
-                override suspend fun add(title: String): Todo {
-                    val doc = Document("_id", TodoId.generate().toString()).append("title", title).append("done", false)
+                override suspend fun add(
+                    title: String
+                ): Todo {
+                    val doc = Document("_id", TodoId.generate().toString())
+                        .append("title", title)
+                        .append("done", false)
                     todos.insertOne(doc)
                     return doc.toTodo()
                 }
 
-                override suspend fun setDone(id: TodoId, done: Boolean): Todo? =
-                    todos.findOneAndUpdate(
-                        eq("_id", id.toString()),
-                        Updates.set("done", done),
-                        FindOneAndUpdateOptions().returnDocument(ReturnDocument.AFTER),
-                    )?.toTodo()
+                override suspend fun setDone(
+                    id: TodoId
+                    , isDone: Boolean
+                ): Todo? = todos
+                    .findOneAndUpdate(
+                        eq("_id", id.toString())
+                        , Updates.set("done", isDone)
+                        , FindOneAndUpdateOptions().returnDocument(ReturnDocument.AFTER)
+                    )
+                    ?.toTodo()
 
-                override suspend fun delete(id: TodoId): Boolean =
-                    todos.deleteOne(eq("_id", id.toString())).deletedCount > 0
+                override suspend fun delete(
+                    id: TodoId
+                ): Boolean = todos.deleteOne(eq("_id", id.toString())).deletedCount > 0
             }
 
-            private fun Document.toTodo() = Todo(TodoId.parse(getString("_id")), getString("title"), getBoolean("done", false))
+            private fun Document.toTodo() = Todo(
+                TodoId.parse(getString("_id"))
+                , getString("title")
+                , getBoolean("done", false)
+            )
         """.trimIndent()
 
+    /** `.fold(...)` that answers [ok] on success and the mapped error status on failure, spliced at [indent]. */
     fun fold(
         ok: String
-    ) = if (hasArrow) "fold({ call.respondError(it) }, { $ok })"
-    else "fold(onSuccess = { $ok }, onFailure = { call.respondError(it) })"
+        , indent: Int
+    ) = foldCall(hasArrow, onFailure = "call.respondError(it)", onSuccess = ok)
+        .indentContinuation(indent)
     val respondError = if (hasArrow) """
-            private suspend fun ApplicationCall.respondError(error: DomainError) = when (error) {
+            private suspend fun ApplicationCall.respondError(
+                error: DomainError
+            ) = when (error) {
                 is DomainError.Invalid -> respond(HttpStatusCode.BadRequest, error.message)
                 is DomainError.NotFound -> respond(HttpStatusCode.NotFound, error.message)
                 is DomainError.Unexpected -> respond(HttpStatusCode.InternalServerError, error.message)
             }
         """.trimIndent() else """
-            private suspend fun ApplicationCall.respondError(error: Throwable) = when (error) {
+            private suspend fun ApplicationCall.respondError(
+                error: Throwable
+            ) = when (error) {
                 is IllegalArgumentException -> respond(HttpStatusCode.BadRequest, error.message ?: "Bad request")
                 is NoSuchElementException -> respond(HttpStatusCode.NotFound, error.message ?: "Not found")
                 else -> respond(HttpStatusCode.InternalServerError, error.message ?: "error")
@@ -593,29 +767,33 @@ fun todoServer(
              * HTTP adapter for the `$s` slice.
              *   GET    /api/$s           list
              *   POST   /api/$s           create  {"title": "..."}
-             *   PATCH  /api/$s/{id}      update  {"done": true}
+             *   PATCH  /api/$s/{id}      update  {"isDone": true}
              *   DELETE /api/$s/{id}      delete
              * {id} is a UUID v7; anything else gets 400 Bad Request.
              */
-            fun Route.todoRoutes(repository: TodoRepository) {
+            fun Route.todoRoutes(
+                repository: TodoRepository
+            ) {
                 val getTodos = GetTodosUseCase(repository)
                 val addTodo = AddTodoUseCase(repository)
                 val setDone = SetTodoDoneUseCase(repository)
                 val deleteTodo = DeleteTodoUseCase(repository)
                 route("/api/$s") {
-                    get { getTodos().${fold("todos -> call.respond(todos.map { it.toDto() })")} }
+                    get {
+                        getTodos().${fold("todos -> call.respond(todos.map { it.toDto() })", 24)}
+                    }
                     post {
                         val body = call.receive<NewTodoDto>()
-                        addTodo(body.title).${fold("call.respond(HttpStatusCode.Created, it.toDto())")}
+                        addTodo(body.title).${fold("call.respond(HttpStatusCode.Created, it.toDto())", 24)}
                     }
                     patch("/{id}") {
                         val id = call.todoId() ?: return@patch call.respondInvalidId()
                         val body = call.receive<TodoPatchDto>()
-                        setDone(id, body.done).${fold("call.respond(it.toDto())")}
+                        setDone(id, body.isDone).${fold("call.respond(it.toDto())", 24)}
                     }
                     delete("/{id}") {
                         val id = call.todoId() ?: return@delete call.respondInvalidId()
-                        deleteTodo(id).${fold("call.respond(HttpStatusCode.NoContent)")}
+                        deleteTodo(id).${fold("call.respond(HttpStatusCode.NoContent)", 24)}
                     }
                 }
             }

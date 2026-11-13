@@ -450,7 +450,11 @@ class ProjectGenerator {
                     Column {
                         PrimaryTabRow(selectedTabIndex = selected) {
                             features.forEachIndexed { i, f ->
-                                Tab(selected = selected == i, onClick = { selected = i }, text = { Text(f.title) })
+                                Tab(
+                                    selected = selected == i
+                                    , onClick = { selected = i }
+                                    , text = { Text(f.title) }
+                                )
                             }
                         }
                         features[selected].Content()
@@ -541,7 +545,9 @@ class ProjectGenerator {
             import ${c.pkg}.ui.App
 
             class MainActivity : ComponentActivity() {
-                override fun onCreate(savedInstanceState: Bundle?) {
+                override fun onCreate(
+                    savedInstanceState: Bundle?
+                ) {
                     super.onCreate(savedInstanceState)
                     setContent { App() }
                 }
@@ -607,7 +613,10 @@ class ProjectGenerator {
             import ${c.pkg}.ui.App
 
             fun main() = application {
-                Window(onCloseRequest = ::exitApplication, title = "${c.slug}") { App() }
+                Window(
+                    onCloseRequest = ::exitApplication
+                    , title = "${c.slug}"
+                ) { App() }
             }
         """.trimIndent()
     }
@@ -781,7 +790,9 @@ class ProjectGenerator {
                     .forEach(::appendLine)
             }
             appendLine("\n/** Port, host and modules come from src/main/resources/application.conf. */")
-            appendLine("fun main(args: Array<String>) = EngineMain.main(args)\n")
+            appendLine("fun main(")
+            appendLine("    args: Array<String>")
+            appendLine(") = EngineMain.main(args)\n")
             appendLine("fun Application.module() {")
             appendLine("    install(ContentNegotiation) { json() }")
             if (hasFlyway) FlywayGenerator.applicationStartup.forEach { appendLine("    $it") }
@@ -795,22 +806,35 @@ class ProjectGenerator {
                 appendLine("    }")
                 append("""
                     |    val mongoConfig = environment.config.config("mongo")
-                    |    val mongoUrl = ConnectionString(mongoConfig.property("uri").getString())
+                    |    val mongoUri = mongoConfig
+                    |        .property("uri")
+                    |        .getString()
+                    |    val mongoUrl = ConnectionString(mongoUri)
                     |    // The driver connects in the background, so the server starts even when MongoDB is down.
                     |    // Requests that need it then fail after 5 s instead of the driver's default 30 s.
                     |    val mongo = MongoClient.create(
-                    |        MongoClientSettings.builder()
+                    |        MongoClientSettings
+                    |            .builder()
                     |            .applyConnectionString(mongoUrl)
-                    |            .applyToClusterSettings { it.serverSelectionTimeout(5, TimeUnit.SECONDS) }
+                    |            .applyToClusterSettings {
+                    |                it.serverSelectionTimeout(5, TimeUnit.SECONDS)
+                    |            }
                     |            .build()
                     |    )
                     |    monitor.subscribe(ApplicationStopped) { mongo.close() }
-                    |    val mongoDb = mongo.getDatabase(mongoConfig.property("database").getString())
+                    |    val mongoDatabaseName = mongoConfig
+                    |        .property("database")
+                    |        .getString()
+                    |    val mongoDb = mongo.getDatabase(mongoDatabaseName)
                     |    // One clear line at startup instead of the driver's connection stack traces (quieted in logback.xml).
                     |    // Logs the hosts only: the URI may carry credentials.
                     |    launch {
-                    |        runCatching { mongoDb.runCommand(Document("ping", 1)) }
-                    |            .onSuccess { log.info("Connected to MongoDB at ${'$'}{mongoUrl.hosts}") }
+                    |        runCatching {
+                    |            mongoDb.runCommand(Document("ping", 1))
+                    |        }
+                    |            .onSuccess {
+                    |                log.info("Connected to MongoDB at ${'$'}{mongoUrl.hosts}")
+                    |            }
                     |            .onFailure {
                     |                log.warn(
                     |                    "MongoDB is not reachable at ${'$'}{mongoUrl.hosts}; /api/$TODO_SLICE fails until it is. " +
