@@ -249,11 +249,12 @@ fun slice(
     val hasArrow = c.lib("arrow")
 
     // ----- domain -----
+    f["$b/domain/${x}ItemId.kt"] = uuidIdType("$p.domain", "${x}ItemId", "${x}Item")
     f["$b/domain/${x}Item.kt"] = """
         package $p.domain
 
         data class ${x}Item(
-            val id: String
+            val id: ${x}ItemId
             , val title: String
         )
     """.trimIndent() + "\n"
@@ -291,10 +292,16 @@ fun slice(
         package $p.data
 
         import $p.domain.${x}Item
+        import $p.domain.${x}ItemId
         import $p.domain.${x}Repository
 
         class InMemory${x}Repository : ${x}Repository {
-            override suspend fun all() = listOf(${x}Item("1", "First $s item"), ${x}Item("2", "Second $s item"))
+            private val items = listOf(
+                ${x}Item(${x}ItemId.generate(), "First $s item")
+                , ${x}Item(${x}ItemId.generate(), "Second $s item")
+            )
+
+            override suspend fun all() = items
         }
     """.trimIndent()
 
@@ -374,14 +381,14 @@ fun slice(
             import kotlinx.serialization.Serializable
             import $p.domain.${x}Item
 
-            /** Wire format of /api/$s. Keeps serialization out of the domain layer. */
+            /** Wire format of /api/$s. Keeps serialization out of the domain layer. [id] is a UUID v7 string. */
             @Serializable
             data class ${x}ItemDto(
                 val id: String
                 , val title: String
             )
 
-            fun ${x}Item.toDto() = ${x}ItemDto(id, title)
+            fun ${x}Item.toDto() = ${x}ItemDto(id.toString(), title)
         """.trimIndent()
         val fold = foldCall(
             hasArrow

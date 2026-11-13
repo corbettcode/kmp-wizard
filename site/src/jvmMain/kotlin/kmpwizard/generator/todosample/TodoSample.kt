@@ -8,6 +8,7 @@ import kmpwizard.generator.featureSrc
 import kmpwizard.generator.foldCall
 import kmpwizard.generator.indentContinuation
 import kmpwizard.generator.slicePkg
+import kmpwizard.generator.uuidIdType
 
 // ---------- Todo sample: clients -> HTTP -> server -> MongoDB, sharing domain + DTOs via core ----------
 
@@ -65,43 +66,7 @@ fun todoSample(
                 , val isDone: Boolean
             )
         """.trimIndent() + "\n"
-    f["$b/domain/TodoId.kt"] = """
-            @file:OptIn(ExperimentalUuidApi::class)
-
-            package $p.domain
-
-            import kotlin.jvm.JvmInline
-            import kotlin.uuid.ExperimentalUuidApi
-            import kotlin.uuid.Uuid
-
-            /**
-             * Identity of a [Todo]: a UUID version 7. Its leading bits are a millisecond timestamp,
-             * so ids sort by creation time (also in their string form).
-             */
-            @JvmInline
-            value class TodoId(
-                val value: Uuid
-            ) {
-                override fun toString() = value.toString()
-
-                companion object {
-                    /** A new, time-ordered id. */
-                    fun generate() = TodoId(Uuid.generateV7())
-
-                    /** Parses the hex-and-dash form; throws IllegalArgumentException if [text] is not a UUID. */
-                    fun parse(
-                        text: String
-                    ) = TodoId(Uuid.parse(text))
-
-                    /** Parses the hex-and-dash form; null if [text] is not a UUID. */
-                    fun parseOrNull(
-                        text: String
-                    ) = Uuid
-                        .parseOrNull(text)
-                        ?.let(::TodoId)
-                }
-            }
-        """.trimIndent()
+    f["$b/domain/TodoId.kt"] = uuidIdType("$p.domain", "TodoId", "Todo")
     f["$b/domain/TodoRepository.kt"] = """
             package $p.domain
 
