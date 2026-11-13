@@ -5,12 +5,14 @@
 #   scripts/smoke-test.sh              # build + test
 #   SKIP_BUILD=1 scripts/smoke-test.sh # test an already-built kmp-wizard image
 #
-# Env: IMAGE (default kmp-wizard), PORT (host port, default 18080), TIMEOUT (seconds to wait for startup, default 90).
+# Env: IMAGE (default kmp-wizard), PORT (host port, default 18080), TIMEOUT (seconds to wait for startup, default 90),
+#      ORIGIN (the public origin browsers send, default https://kmpwizard.corbettcode.com).
 set -euo pipefail
 
 IMAGE=${IMAGE:-kmp-wizard}
 PORT=${PORT:-18080}
 TIMEOUT=${TIMEOUT:-90}
+ORIGIN=${ORIGIN:-https://kmpwizard.corbettcode.com}
 BASE="http://localhost:$PORT"
 NAME="kmp-wizard-smoke-$$"
 TMP=$(mktemp -d)
@@ -51,9 +53,11 @@ echo "==> GET / serves the site"
 curl -fsS "$BASE/" -o "$TMP/index.html" || fail "GET / failed"
 grep -q "KMP Wizard" "$TMP/index.html" || fail "GET / did not return the wizard page"
 
-echo "==> POST /api/generate returns a project ZIP"
+# Send the public Origin like a browser does: the container does not see that origin as its own, so a missing
+# CORS entry in site/.kobweb/conf.yaml shows up here as a 403 with an empty body.
+echo "==> POST /api/generate (Origin: $ORIGIN) returns a project ZIP"
 status=$(curl -sS -o "$TMP/project.zip" -w '%{http_code}' -X POST "$BASE/api/generate" \
-    -H 'Content-Type: application/json' \
+    -H 'Content-Type: application/json' -H "Origin: $ORIGIN" \
     --data '{"name":"SmokeTest","packageName":"com.example.smoketest","targets":["DESKTOP","SERVER"],"slices":[],"libraries":[],"sampleTodo":true}')
 [[ "$status" == "200" ]] || fail "/api/generate returned HTTP $status: $(head -c 500 "$TMP/project.zip")"
 unzip -l "$TMP/project.zip" > "$TMP/listing.txt" 2>&1 || fail "/api/generate did not return a valid ZIP"

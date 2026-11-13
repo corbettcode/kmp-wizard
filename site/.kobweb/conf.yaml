@@ -12,3 +12,11 @@ server:
       siteRoot: ".kobweb/site"
 
   port: 8080
+
+  # Browsers send an Origin header on every fetch POST. Behind App Platform the server is reached over plain HTTP on
+  # port 8080, so it does not recognise the public https origin as its own and Ktor's CORS check answers 403 with an
+  # empty body. List the public origin explicitly.
+  cors:
+    hosts:
+      - name: "kmpwizard.corbettcode.com"
+        schemes: [ "https" ]
