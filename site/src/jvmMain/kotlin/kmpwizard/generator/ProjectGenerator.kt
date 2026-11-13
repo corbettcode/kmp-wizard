@@ -581,7 +581,11 @@ class ProjectGenerator {
                 application
             }
 
-            application { mainClass.set("$sp.ApplicationKt") }
+            application {
+                mainClass.set("$sp.ApplicationKt")
+                // Netty loads native transports; without this, JDK 24+ prints "restricted method" warnings.
+                applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+            }
 
             dependencies {
                 __SLICE_SERVERS__
@@ -615,8 +619,14 @@ class ProjectGenerator {
                 appendLine("import io.ktor.http.HttpHeaders")
                 appendLine("import io.ktor.http.HttpMethod")
                 appendLine("import io.ktor.server.application.ApplicationStopped")
+                appendLine("import io.ktor.server.application.log")
                 appendLine("import io.ktor.server.plugins.cors.routing.CORS")
+                appendLine("import com.mongodb.ConnectionString")
+                appendLine("import com.mongodb.MongoClientSettings")
                 appendLine("import com.mongodb.kotlin.client.coroutine.MongoClient")
+                appendLine("import java.util.concurrent.TimeUnit")
+                appendLine("import kotlinx.coroutines.launch")
+                appendLine("import org.bson.Document")
                 appendLine("import ${slicePkg(c, TODO_SLICE)}.server.MongoTodoRepository")
                 appendLine("import ${slicePkg(c, TODO_SLICE)}.server.todoRoutes")
             }
@@ -635,11 +645,33 @@ class ProjectGenerator {
                 appendLine("        allowMethod(HttpMethod.Patch)")
                 appendLine("        allowMethod(HttpMethod.Delete)")
                 appendLine("    }")
-                appendLine("    val mongoConfig = environment.config.config(\"mongo\")")
-                appendLine("    // The driver connects lazily, so the server starts even when MongoDB is down.")
-                appendLine("    val mongo = MongoClient.create(mongoConfig.property(\"uri\").getString())")
-                appendLine("    monitor.subscribe(ApplicationStopped) { mongo.close() }")
-                appendLine("    val todos = MongoTodoRepository(mongo.getDatabase(mongoConfig.property(\"database\").getString()))")
+                append("""
+                    |    val mongoConfig = environment.config.config("mongo")
+                    |    val mongoUrl = ConnectionString(mongoConfig.property("uri").getString())
+                    |    // The driver connects in the background, so the server starts even when MongoDB is down.
+                    |    // Requests that need it then fail after 5 s instead of the driver's default 30 s.
+                    |    val mongo = MongoClient.create(
+                    |        MongoClientSettings.builder()
+                    |            .applyConnectionString(mongoUrl)
+                    |            .applyToClusterSettings { it.serverSelectionTimeout(5, TimeUnit.SECONDS) }
+                    |            .build()
+                    |    )
+                    |    monitor.subscribe(ApplicationStopped) { mongo.close() }
+                    |    val mongoDb = mongo.getDatabase(mongoConfig.property("database").getString())
+                    |    // One clear line at startup instead of the driver's connection stack traces (quieted in logback.xml).
+                    |    // Logs the hosts only: the URI may carry credentials.
+                    |    launch {
+                    |        runCatching { mongoDb.runCommand(Document("ping", 1)) }
+                    |            .onSuccess { log.info("Connected to MongoDB at ${'$'}{mongoUrl.hosts}") }
+                    |            .onFailure {
+                    |                log.warn(
+                    |                    "MongoDB is not reachable at ${'$'}{mongoUrl.hosts}; /api/$TODO_SLICE fails until it is. " +
+                    |                        "Start it with `docker compose up -d`, or point MONGODB_URI at your own instance."
+                    |                )
+                    |            }
+                    |    }
+                    |    val todos = MongoTodoRepository(mongoDb)
+                    |""".trimMargin() + "\n")
             }
             appendLine("    routing {")
             appendLine("        get(\"/\") { call.respondText(\"${c.slug} server is running\") }")
@@ -677,8 +709,13 @@ class ProjectGenerator {
                 </appender>
                 <root level="INFO"><appender-ref ref="STDOUT" /></root>
                 <logger name="io.netty" level="WARN" />
+                __MONGO_LOGGER__
             </configuration>
-        """.trimIndent()
+        """.trimIndent().replace(
+            "    __MONGO_LOGGER__\n",
+            // The driver logs every failed background connection attempt with a stack trace; Application logs one line.
+            if (c.todo) "    <logger name=\"org.mongodb.driver\" level=\"WARN\" />\n" else "",
+        )
         f["server/src/test/kotlin/$sd/ApplicationTest.kt"] = buildString {
             appendLine("package $sp\n")
             appendLine("import io.ktor.client.request.get")
