@@ -5,7 +5,7 @@ import kmpwizard.generator.ProjectContext
 import kmpwizard.generator.SERVER_PORT
 import kmpwizard.generator.coreUiPkg
 import kmpwizard.generator.featureSrc
-import kmpwizard.generator.featuresPkg
+import kmpwizard.generator.slicePkg
 
 // ---------- Todo sample: clients -> HTTP -> server -> MongoDB, sharing domain + DTOs via core ----------
 
@@ -17,7 +17,7 @@ private fun todoResultImports(c: ProjectContext) =
 
 fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
     val s = TODO_SLICE
-    val p = "${featuresPkg(c)}.$s"
+    val p = slicePkg(c, s)
     // Every layer of the slice lives in one package, across feature/todo/shared, client and server.
     val b = featureSrc(c, s, "commonMain")
     // Client-only code (Compose, Ktor client) goes in feature/todo/client; the server never depends on it.
@@ -479,7 +479,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
 /** Server side of the Todo sample: MongoDB adapter + HTTP routes. */
 fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
     val s = TODO_SLICE
-    val p = "${featuresPkg(c)}.$s"
+    val p = slicePkg(c, s)
     val tp = "$p.server"
     val td = "${featureSrc(c, s, "serverMain")}/server"
     val arrow = c.lib("arrow")

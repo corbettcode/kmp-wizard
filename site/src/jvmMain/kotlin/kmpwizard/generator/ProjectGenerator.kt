@@ -22,7 +22,7 @@ import kotlin.io.path.*
  *
  *   core/            shared kernel for every slice: logging, errors (no UI)
  *   coreUI/          UI kernel for every slice: the Feature contract the shell renders (Compose)
- *   feature/<slice>/ one directory per vertical slice, package <pkg>.features.<slice>, split by where it runs:
+ *   feature/<slice>/ one directory per vertical slice, package <pkg>.<slice>, split by where it runs:
  *     shared/        domain + data (KMP, every target)
  *     client/        presentation + client adapters (KMP + Compose)
  *     server/        Ktor routes + server adapters (JVM)
@@ -316,9 +316,9 @@ class ProjectGenerator {
         f["$base/AppFeatures.kt"] = buildString {
             appendLine("package ${c.pkg}.ui\n")
             appendLine("import ${coreUiPkg(c)}.Feature")
-            c.allSlices.zip(names).forEach { (s, x) -> appendLine("import ${featuresPkg(c)}.$s.${x}Feature") }
+            c.allSlices.zip(names).forEach { (s, x) -> appendLine("import ${slicePkg(c, s)}.${x}Feature") }
             if (koin) {
-                sliceKoinModules(c).forEach { (s, m) -> appendLine("import ${featuresPkg(c)}.$s.$m") }
+                sliceKoinModules(c).forEach { (s, m) -> appendLine("import ${slicePkg(c, s)}.$m") }
                 appendLine("import org.koin.core.module.Module")
             }
             appendLine("\nval features: List<Feature> = listOf(${names.joinToString { it + "Feature" }})")
@@ -617,10 +617,10 @@ class ProjectGenerator {
                 appendLine("import io.ktor.server.application.ApplicationStopped")
                 appendLine("import io.ktor.server.plugins.cors.routing.CORS")
                 appendLine("import com.mongodb.kotlin.client.coroutine.MongoClient")
-                appendLine("import ${featuresPkg(c)}.$TODO_SLICE.server.MongoTodoRepository")
-                appendLine("import ${featuresPkg(c)}.$TODO_SLICE.server.todoRoutes")
+                appendLine("import ${slicePkg(c, TODO_SLICE)}.server.MongoTodoRepository")
+                appendLine("import ${slicePkg(c, TODO_SLICE)}.server.todoRoutes")
             }
-            slices.forEach { (s, _) -> appendLine("import ${featuresPkg(c)}.$s.server.${s}Routes") }
+            slices.forEach { (s, _) -> appendLine("import ${slicePkg(c, s)}.server.${s}Routes") }
             if (flyway) FlywayGenerator.applicationImports(c).forEach(::appendLine)
             appendLine("\n/** Port, host and modules come from src/main/resources/application.conf. */")
             appendLine("fun main(args: Array<String>) = EngineMain.main(args)\n")

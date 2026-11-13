@@ -9,13 +9,13 @@ import kmpwizard.Target
 //   feature/<slice>/client   KMP + Compose        presentation/ (screens, ViewModels), <Slice>Feature.kt, HTTP adapters   (when a UI target is picked)
 //   feature/<slice>/server   kotlin("jvm")        server/ (Ktor routes, server-only adapters)        (when Server is picked)
 //
-// All three use the package <pkg>.features.<slice>. Separate modules keep server code out of the client
+// All three use the package <pkg>.<slice>. Separate modules keep server code out of the client
 // apps and Compose out of the server (Kotlin doesn't allow two JVM targets in one module).
 // app/sharedUI depends on every :feature:<slice>:client, server on every :feature:<slice>:server.
 // The Feature interface the app shell renders lives in coreUI, shared by every slice's client module.
 
-/** Package of every slice, `<pkg>.features.<slice>` below it. */
-fun featuresPkg(c: ProjectContext) = "${c.pkg}.features"
+/** Package of slice [s]: `<pkg>.<slice>`, shared by its shared, client and server modules. */
+fun slicePkg(c: ProjectContext, s: String) = "${c.pkg}.$s"
 
 /** Package of coreUI: UI kernel shared by the slices' client modules and the app shell, e.g. [Feature]. */
 fun coreUiPkg(c: ProjectContext) = "${c.pkg}.core.ui"
@@ -32,7 +32,7 @@ fun featureSrc(c: ProjectContext, s: String, part: String) = when (part) {
     "clientMain" -> "${sliceModuleDir(s, "client")}/src/commonMain"
     "serverMain" -> "${sliceModuleDir(s, "server")}/src/main"
     else -> error("Unknown feature part: $part")
-} + "/kotlin/${c.dir}/features/$s"
+} + "/kotlin/${c.dir}/$s"
 
 /** Gradle project paths of every slice's modules, plus coreUI when there is a UI. */
 fun featureModulePaths(c: ProjectContext) = buildList {
@@ -68,7 +68,7 @@ fun featureModules(c: ProjectContext, f: MutableMap<String, String>) {
  * and a unique module/archive name keep their Maven coordinates, Kotlin modules and jars apart.
  */
 private fun sliceIdentity(c: ProjectContext, s: String, module: String) =
-    ModuleIdentity(group = "${featuresPkg(c)}.$s", name = "feature-$s-$module")
+    ModuleIdentity(group = slicePkg(c, s), name = "feature-$s-$module")
 
 /** UI kernel for the slices' client modules and the app shell: the [Feature] contract. */
 private fun coreUiModule(c: ProjectContext, f: MutableMap<String, String>) {
@@ -107,7 +107,7 @@ private fun sliceShared(c: ProjectContext, s: String, f: MutableMap<String, Stri
     // The Todo sample's wire DTOs are @Serializable and shared by the HTTP client and the server.
     if (s == TODO_SLICE) add("commonMain", "implementation(libs.ktor.serialization.kotlinx.json)")
     f["${sliceModuleDir(s, "shared")}/build.gradle.kts"] = kmpBuildScript(
-        c, namespace = "${featuresPkg(c)}.$s.shared", compose = false, jvm = c.hasJvm, iosFramework = null,
+        c, namespace = "${slicePkg(c, s)}.shared", compose = false, jvm = c.hasJvm, iosFramework = null,
         plugins = c.corePlugins, deps = deps, junit = c.lib("kotest"), identity = sliceIdentity(c, s, "shared"),
     )
 }
@@ -134,7 +134,7 @@ private fun sliceClient(c: ProjectContext, s: String, f: MutableMap<String, Stri
         },
     )
     f["${sliceModuleDir(s, "client")}/build.gradle.kts"] = kmpBuildScript(
-        c, namespace = "${featuresPkg(c)}.$s.client", compose = true, jvm = c.has(Target.DESKTOP), iosFramework = null,
+        c, namespace = "${slicePkg(c, s)}.client", compose = true, jvm = c.has(Target.DESKTOP), iosFramework = null,
         plugins = if (todo) listOf("kotlinSerialization") else emptyList(), deps = deps,
         identity = sliceIdentity(c, s, "client"),
     )
@@ -163,10 +163,10 @@ private fun sliceServer(c: ProjectContext, s: String, f: MutableMap<String, Stri
     """.trimIndent() + "\n"
 }
 
-/** Sources of one user-defined vertical slice: every layer in `<pkg>.features.<slice>`, under `feature/<slice>/`. */
+/** Sources of one user-defined vertical slice: every layer in `<pkg>.<slice>`, under `feature/<slice>/`. */
 fun slice(c: ProjectContext, s: String, f: MutableMap<String, String>) {
     val x = s.replaceFirstChar(Char::uppercase)
-    val p = "${featuresPkg(c)}.$s"
+    val p = slicePkg(c, s)
     val b = featureSrc(c, s, "commonMain")
     val cb = featureSrc(c, s, "clientMain")
     val arrow = c.lib("arrow")

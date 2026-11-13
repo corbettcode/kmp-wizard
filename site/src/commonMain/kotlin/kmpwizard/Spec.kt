@@ -64,8 +64,9 @@ object Catalog {
     )
     val byId = libraries.associateBy { it.id }
 
+    /** Kotlin keywords, plus the app's own packages next to the slices' `<pkg>.<slice>` (core, ui, app). */
     private val reserved = setOf(
-        "core", "object", "class", "fun", "val", "var", "in", "is", "as", "if", "else", "when",
+        "core", "ui", "app", "object", "class", "fun", "val", "var", "in", "is", "as", "if", "else", "when",
         "for", "while", "do", "try", "package", "interface", "return", "typealias",
     )
 
