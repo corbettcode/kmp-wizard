@@ -235,10 +235,8 @@ class ProjectGenerator {
             v["activity"] = ACTIVITY
         }
         c.activeLibs.forEach { v[it.versionKey] = it.version; v.putAll(it.extraVersions) }
-        if (c.has(Target.SERVER)) {
-            v["ktor"] = KTOR
-            v["logback"] = LOGBACK
-        }
+        if (c.has(Target.SERVER)) v["ktor"] = KTOR
+        if (c.has(Target.SERVER) || desktopLogback(c)) v["logback"] = LOGBACK
         if (c.todo) v["mongodb"] = MONGODB
         if (c.lib(FlywayGenerator.ID)) FlywayGenerator.versions(v)
 
@@ -262,8 +260,8 @@ class ProjectGenerator {
             lib("ktor-server-content-negotiation", "io.ktor:ktor-server-content-negotiation", "ktor")
             lib("ktor-serialization-kotlinx-json", "io.ktor:ktor-serialization-kotlinx-json", "ktor")
             lib("ktor-server-test-host", "io.ktor:ktor-server-test-host", "ktor")
-            lib("logback", "ch.qos.logback:logback-classic", "logback")
         }
+        if (c.has(Target.SERVER) || desktopLogback(c)) lib("logback", "ch.qos.logback:logback-classic", "logback")
         if (c.todo) {
             lib("ktor-client-content-negotiation", "io.ktor:ktor-client-content-negotiation", "ktor")
             lib("ktor-server-cors", "io.ktor:ktor-server-cors", "ktor")
@@ -443,6 +441,9 @@ class ProjectGenerator {
         """.trimIndent()
     }
 
+    /** The desktop app gets the Ktor client's slf4j-api on its classpath, so it needs a logging backend. */
+    private fun desktopLogback(c: ProjectContext) = c.has(Target.DESKTOP) && c.lib("ktor")
+
     private fun desktopApp(c: ProjectContext, f: MutableMap<String, String>) {
         f["app/desktopApp/build.gradle.kts"] = """
             import org.jetbrains.compose.desktop.application.dsl.TargetFormat
@@ -456,7 +457,7 @@ class ProjectGenerator {
             dependencies {
                 implementation(projects.app.sharedUI)
                 implementation(compose.desktop.currentOs)
-                implementation(libs.coroutines.swing)
+                implementation(libs.coroutines.swing)__LOGBACK__
             }
 
             compose.desktop {
@@ -469,6 +470,17 @@ class ProjectGenerator {
                     }
                 }
             }
+        """.trimIndent().replace(
+            "__LOGBACK__",
+            if (desktopLogback(c)) "\n    // The Ktor client logs through SLF4J; without a backend it prints \"No SLF4J providers were found\".\n    runtimeOnly(libs.logback)" else "",
+        )
+        if (desktopLogback(c)) f["app/desktopApp/src/main/resources/logback.xml"] = """
+            <configuration>
+                <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+                    <encoder><pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern></encoder>
+                </appender>
+                <root level="INFO"><appender-ref ref="STDOUT" /></root>
+            </configuration>
         """.trimIndent()
         f["app/desktopApp/src/main/kotlin/${c.appDir("desktop")}/Main.kt"] = """
             package ${c.appPkg("desktop")}
