@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "kmpwizard"
-version = "1.0.1"
+version = "1.0.2"
 
 // Generates kmpwizard.APP_VERSION from `version` above, so the UI always shows the build's version.
 val generateBuildInfo = tasks.register("generateBuildInfo") {
