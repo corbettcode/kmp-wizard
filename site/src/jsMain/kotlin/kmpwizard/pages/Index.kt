@@ -73,7 +73,13 @@ fun HomePage() {
     ) {
         H1 {
             Text("KMP Project Wizard ")
-            SpanText("v$APP_VERSION", Modifier.fontSize(0.5.em).fontWeight(FontWeight.Normal).color(Colors.Gray))
+            SpanText(
+                "v$APP_VERSION"
+                , Modifier
+                    .fontSize(0.5.em)
+                    .fontWeight(FontWeight.Normal)
+                    .color(Colors.Gray)
+            )
         }
 
         Row(Modifier.gap(1.cssRem)) {
@@ -201,13 +207,24 @@ fun HomePage() {
                     onClick = {
                         scope.launch {
                             busy = true; status = "Generating…"
-                            val bytes = window.api.tryPost("generate", body = bodyOf(Json.encodeToString(spec), "application/json")) { bodyAsBytes() }
+
+                            val bytes = window
+                                .api
+                                .tryPost(
+                                    "generate"
+                                    , body = bodyOf(
+                                        Json.encodeToString(spec)
+                                        , "application/json")
+                                ) {
+                                    bodyAsBytes()
+                                }
+
                             status = if (bytes == null) "Generation failed, check your selections." else {
                                 download(bytes, "${spec.slug()}.zip"); "Downloaded ${spec.slug()}.zip"
                             }
                             busy = false
                         }
-                    },
+                    }
                 ) { Text(if (busy) "Generating…" else "Generate & download ZIP") }
             }
         }
