@@ -25,8 +25,11 @@ data class ProjectSpecification(
 /** Slice name used by the Todo sample. */
 const val TODO_SLICE = "todo"
 
-/** Library ids the Todo sample relies on (its HTTP client); always included when the sample is on. */
-val TODO_LIBRARIES = setOf("ktor", "serialization")
+/**
+ * Library ids the Todo sample relies on (its HTTP client, and Koin for its ViewModel and wiring);
+ * always included when the sample is on.
+ */
+val TODO_LIBRARIES = setOf("ktor", "serialization", "koin")
 
 data class LibraryOption(
     val id: String,
@@ -41,14 +44,15 @@ data class LibraryOption(
 
 object Catalog {
     val libraries = listOf(
+        LibraryOption("arrow", "Arrow-kt", "Typed errors: use cases return Either<DomainError, T>", "Functional"),
+        LibraryOption("datetime", "kotlinx-datetime", "Multiplatform date/time", "Utilities"),
+        LibraryOption("serialization", "kotlinx.serialization", "JSON serialization", "Networking"),
+        LibraryOption("ktor", "Ktor client", "HTTP client with the right engine per platform", "Networking"),
+        LibraryOption("koin", "Koin", "Dependency injection (core + Compose/ViewModel)", "Dependency injection"),
+
+        LibraryOption("kermit", "Kermit", "Multiplatform logging (wired into AppLogger)", "Observability"),
         LibraryOption("kotest", "Kotest", "Spec-style tests + expressive assertions", "Testing"),
         LibraryOption("turbine", "Turbine", "Testing for Kotlin Flows", "Testing"),
-        LibraryOption("kermit", "Kermit", "Multiplatform logging (wired into AppLogger)", "Observability"),
-        LibraryOption("koin", "Koin", "Dependency injection (core + Compose/ViewModel)", "Dependency injection"),
-        LibraryOption("arrow", "Arrow-kt", "Typed errors: use cases return Either<DomainError, T>", "Functional"),
-        LibraryOption("ktor", "Ktor client", "HTTP client with the right engine per platform", "Networking"),
-        LibraryOption("serialization", "kotlinx.serialization", "JSON serialization", "Networking"),
-        LibraryOption("datetime", "kotlinx-datetime", "Multiplatform date/time", "Utilities"),
         LibraryOption(
             "flyway", "Flyway", "SQL migrations for the server: PostgreSQL (docker-compose), H2 in tests",
             "Database", setOf(Target.SERVER),

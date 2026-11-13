@@ -291,9 +291,93 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
 
     if (!c.hasUi) return
 
-    // ----- presentation -----
-    val report = if (arrow) "fold({ error = it.message; null }, { error = null; it })"
-    else "fold(onSuccess = { error = null; it }, onFailure = { error = it.message ?: \"error\"; null })"
+    // ----- presentation: TodoViewModel (from Koin) holds the state, TodoScreen renders it -----
+    val report = if (arrow) "fold({ report(it.message); null }, { report(null); it })"
+    else "fold(onSuccess = { report(null); it }, onFailure = { report(it.message ?: \"error\"); null })"
+    f["$ub/presentation/TodoViewModel.kt"] = """
+            package $p.presentation
+
+            import androidx.compose.runtime.getValue
+            import androidx.compose.runtime.mutableStateOf
+            import androidx.compose.runtime.setValue
+            import androidx.lifecycle.ViewModel
+            import androidx.lifecycle.viewModelScope
+            import kotlinx.coroutines.flow.MutableStateFlow
+            import kotlinx.coroutines.flow.StateFlow
+            import kotlinx.coroutines.flow.asStateFlow
+            import kotlinx.coroutines.flow.update
+            import kotlinx.coroutines.launch
+            __IMPORTS__
+            import $p.domain.AddTodoUseCase
+            import $p.domain.DeleteTodoUseCase
+            import $p.domain.GetTodosUseCase
+            import $p.domain.SetTodoDoneUseCase
+            import $p.domain.Todo
+            import $p.domain.TodoId
+
+            data class TodoUiState(
+                val todos: List<Todo> = emptyList(),
+                val loading: Boolean = true,
+                /** Last server error, cleared by the next successful call. */
+                val error: String? = null,
+            )
+
+            /**
+             * State holder of the Todo screen. It outlives the composition (e.g. switching tabs), so the list
+             * isn't reloaded each time the screen is shown. Work runs in [viewModelScope], cancelled when it's cleared.
+             */
+            class TodoViewModel(
+                private val getTodos: GetTodosUseCase,
+                private val addTodo: AddTodoUseCase,
+                private val setTodoDone: SetTodoDoneUseCase,
+                private val deleteTodo: DeleteTodoUseCase,
+            ) : ViewModel() {
+                private val _state = MutableStateFlow(TodoUiState())
+                val state: StateFlow<TodoUiState> = _state.asStateFlow()
+
+                /** Text field input. Compose state, not a flow, so typing updates it synchronously. */
+                var newTitle by mutableStateOf("")
+
+                init { refresh() }
+
+                fun refresh() {
+                    _state.update { it.copy(loading = true) }
+                    viewModelScope.launch {
+                        val todos = getTodos().orReport()
+                        _state.update { it.copy(loading = false, todos = todos ?: it.todos) }
+                    }
+                }
+
+                fun add() {
+                    val title = newTitle.takeIf { it.isNotBlank() } ?: return
+                    viewModelScope.launch {
+                        addTodo(title).orReport()?.let { todo ->
+                            _state.update { it.copy(todos = it.todos + todo) }
+                            newTitle = ""
+                        }
+                    }
+                }
+
+                fun setDone(id: TodoId, done: Boolean) {
+                    viewModelScope.launch {
+                        setTodoDone(id, done).orReport()?.let { updated ->
+                            _state.update { s -> s.copy(todos = s.todos.map { if (it.id == updated.id) updated else it }) }
+                        }
+                    }
+                }
+
+                fun delete(id: TodoId) {
+                    viewModelScope.launch {
+                        deleteTodo(id).orReport()?.let { _state.update { s -> s.copy(todos = s.todos.filterNot { it.id == id }) } }
+                    }
+                }
+
+                private fun report(error: String?) = _state.update { it.copy(error = error) }
+
+                /** Shows a failure and returns null, or clears the error and returns the value. */
+                private fun <T> ${r("T")}.orReport(): T? = $report
+            }
+        """.trimIndent().replace("__IMPORTS__\n", imports)
     f["$ub/presentation/TodoScreen.kt"] = """
             package $p.presentation
 
@@ -308,110 +392,88 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             import androidx.compose.material3.Text
             import androidx.compose.material3.TextButton
             import androidx.compose.runtime.Composable
-            import androidx.compose.runtime.LaunchedEffect
+            import androidx.compose.runtime.collectAsState
             import androidx.compose.runtime.getValue
-            import androidx.compose.runtime.mutableStateOf
-            import androidx.compose.runtime.remember
-            import androidx.compose.runtime.rememberCoroutineScope
-            import androidx.compose.runtime.setValue
             import androidx.compose.ui.Alignment
             import androidx.compose.ui.Modifier
             import androidx.compose.ui.text.style.TextDecoration
             import androidx.compose.ui.unit.dp
-            import kotlinx.coroutines.launch
-            __IMPORTS__
-            import $p.domain.AddTodoUseCase
-            import $p.domain.DeleteTodoUseCase
-            import $p.domain.GetTodosUseCase
-            import $p.domain.SetTodoDoneUseCase
-            import $p.domain.Todo
 
             @Composable
-            fun TodoScreen(
-                getTodos: GetTodosUseCase,
-                addTodo: AddTodoUseCase,
-                setDone: SetTodoDoneUseCase,
-                deleteTodo: DeleteTodoUseCase,
-            ) {
-                var todos by remember { mutableStateOf<List<Todo>>(emptyList()) }
-                var loading by remember { mutableStateOf(true) }
-                var error by remember { mutableStateOf<String?>(null) }
-                var newTitle by remember { mutableStateOf("") }
-                val scope = rememberCoroutineScope()
-
-                /** Shows a failure and returns null, or returns the value. */
-                fun <T> ${r("T")}.orReport(): T? = $report
-
-                LaunchedEffect(Unit) {
-                    getTodos().orReport()?.let { todos = it }
-                    loading = false
-                }
+            fun TodoScreen(viewModel: TodoViewModel) {
+                val state by viewModel.state.collectAsState()
 
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
-                            value = newTitle,
-                            onValueChange = { newTitle = it },
+                            value = viewModel.newTitle,
+                            onValueChange = { viewModel.newTitle = it },
                             label = { Text("New todo") },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
-                        Button(enabled = newTitle.isNotBlank(), onClick = {
-                            val title = newTitle
-                            scope.launch { addTodo(title).orReport()?.let { todos = todos + it; newTitle = "" } }
-                        }) { Text("Add") }
+                        Button(enabled = viewModel.newTitle.isNotBlank(), onClick = viewModel::add) { Text("Add") }
                     }
-                    error?.let { Text("Server error: ${'$'}it", color = MaterialTheme.colorScheme.error) }
+                    state.error?.let { Text("Server error: ${'$'}it", color = MaterialTheme.colorScheme.error) }
                     when {
-                        loading -> Text("Loading…")
-                        todos.isEmpty() -> Text("Nothing to do.")
+                        state.loading -> Text("Loading…")
+                        state.todos.isEmpty() -> Text("Nothing to do.")
                     }
-                    todos.forEach { todo ->
+                    state.todos.forEach { todo ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = todo.done, onCheckedChange = { done ->
-                                scope.launch {
-                                    setDone(todo.id, done).orReport()?.let { updated ->
-                                        todos = todos.map { if (it.id == updated.id) updated else it }
-                                    }
-                                }
-                            })
+                            Checkbox(checked = todo.done, onCheckedChange = { viewModel.setDone(todo.id, it) })
                             Text(
                                 todo.title,
                                 modifier = Modifier.weight(1f),
                                 textDecoration = if (todo.done) TextDecoration.LineThrough else null,
                             )
-                            TextButton(onClick = {
-                                scope.launch { deleteTodo(todo.id).orReport()?.let { todos = todos.filterNot { it.id == todo.id } } }
-                            }) { Text("Delete") }
+                            TextButton(onClick = { viewModel.delete(todo.id) }) { Text("Delete") }
                         }
                     }
                 }
             }
-        """.trimIndent().replace("__IMPORTS__\n", imports)
-    f["$ub/TodoFeature.kt"] = """
-            package $p
-
-            import androidx.compose.runtime.Composable
-            import ${c.pkg}.core.defaultServerUrl
-            import ${coreUiPkg(c)}.Feature
-            import $p.data.HttpTodoRepository
-            import $p.domain.AddTodoUseCase
-            import $p.domain.DeleteTodoUseCase
-            import $p.domain.GetTodosUseCase
-            import $p.domain.SetTodoDoneUseCase
-            import $p.presentation.TodoScreen
-
-            /** Composition root: clients store todos on the server over HTTP. */
-            object TodoFeature : Feature {
-                override val title = "Todo"
-                private val repository = HttpTodoRepository(defaultServerUrl)
-                private val getTodos = GetTodosUseCase(repository)
-                private val addTodo = AddTodoUseCase(repository)
-                private val setDone = SetTodoDoneUseCase(repository)
-                private val deleteTodo = DeleteTodoUseCase(repository)
-                @Composable override fun Content() = TodoScreen(getTodos, addTodo, setDone, deleteTodo)
-            }
         """.trimIndent()
+    // Koin builds the object graph; the screen gets its ViewModel with koinViewModel().
+    f["$ub/TodoModule.kt"] = """
+        package $p
+
+        import org.koin.core.module.dsl.factoryOf
+        import org.koin.core.module.dsl.viewModelOf
+        import org.koin.dsl.module
+        import ${c.pkg}.core.defaultServerUrl
+        import $p.data.HttpTodoRepository
+        import $p.domain.AddTodoUseCase
+        import $p.domain.DeleteTodoUseCase
+        import $p.domain.GetTodosUseCase
+        import $p.domain.SetTodoDoneUseCase
+        import $p.domain.TodoRepository
+        import $p.presentation.TodoViewModel
+
+        /** Composition root of the `$s` slice on clients: todos are stored on the server over HTTP. Loaded by App. */
+        val todoModule = module {
+            single<TodoRepository> { HttpTodoRepository(defaultServerUrl) }
+            factoryOf(::GetTodosUseCase)
+            factoryOf(::AddTodoUseCase)
+            factoryOf(::SetTodoDoneUseCase)
+            factoryOf(::DeleteTodoUseCase)
+            viewModelOf(::TodoViewModel)
+        }
+    """.trimIndent()
+    f["$ub/TodoFeature.kt"] = """
+        package $p
+
+        import androidx.compose.runtime.Composable
+        import org.koin.compose.viewmodel.koinViewModel
+        import ${coreUiPkg(c)}.Feature
+        import $p.presentation.TodoScreen
+
+        object TodoFeature : Feature {
+            override val title = "Todo"
+
+            /** The ViewModel comes from [todoModule], scoped to the platform's ViewModelStoreOwner. */
+            @Composable override fun Content() = TodoScreen(koinViewModel())
+        }
+    """.trimIndent()
 }
 
 /** Server side of the Todo sample: MongoDB adapter + HTTP routes. */

@@ -80,7 +80,8 @@ val wiring = mapOf(
     )
 
     // Kotest 6: the `io.kotest` plugin plus KSP discover specs on non-JVM targets; JVM runs on JUnit Platform.
-    // Koin: core gets koin-core (+ koin-android); the Compose artifacts go in app/sharedUI (see sharedUiModule).
+    // Koin: core gets koin-core (+ koin-android); the Compose/ViewModel artifacts go in app/sharedUI and the slices'
+    // client modules (see sharedUiModule, sliceClient). koin-*-viewmodel bring androidx-lifecycle's ViewModel along.
     // Arts with no source sets are catalog-only.
     , "koin" to Library(
         "koin"
@@ -222,7 +223,7 @@ class ProjectContext(val spec: ProjectSpecification) {
     val hasJvm get() = spec.targets.any { it in jvmTargets }
     val hasUi get() = spec.targets.any { it in uiTargets }
     val todo get() = spec.sampleTodo
-    /** The Todo sample's HTTP client needs Ktor and kotlinx.serialization in core. */
+    /** The Todo sample needs Ktor and kotlinx.serialization (HTTP client) and Koin (wiring, ViewModel). */
     val libIds: Set<String> = spec.libraries + if (spec.sampleTodo) TODO_LIBRARIES else emptySet()
     fun lib(id: String) = id in libIds
     val activeLibs = libIds.sorted().mapNotNull { wiring[it] }

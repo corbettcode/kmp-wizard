@@ -51,7 +51,7 @@ fun readme(c: ProjectContext) = buildString {
     }
     if (c.todo) {
         appendLine("\n## Todo sample")
-        appendLine("The `$TODO_SLICE` slice is a full round trip: Compose screen -> use cases -> `HttpTodoRepository` (Ktor client)")
+        appendLine("The `$TODO_SLICE` slice is a full round trip: Compose screen -> ${if (c.hasUi) "`TodoViewModel` (from Koin) -> " else ""}use cases -> `HttpTodoRepository` (Ktor client)")
         appendLine("-> `/api/$TODO_SLICE` on the server -> use cases -> `MongoTodoRepository` (server only) -> MongoDB.")
         appendLine("All of it lives in package `${c.pkg}.features.$TODO_SLICE` under `feature/$TODO_SLICE/`; clients and server share its domain, use cases and wire DTOs from `feature/$TODO_SLICE/shared`.\n")
         appendLine("1. Start MongoDB: `docker compose up -d` (or set `MONGODB_URI` to your own instance).")

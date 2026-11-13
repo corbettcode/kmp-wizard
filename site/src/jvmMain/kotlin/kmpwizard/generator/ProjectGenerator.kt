@@ -312,11 +312,20 @@ class ProjectGenerator {
 
         val base = "app/sharedUI/src/commonMain/kotlin/${c.dir}/ui"
         val names = c.allSlices.map { it.replaceFirstChar(Char::uppercase) }
+        val koin = c.lib("koin")
         f["$base/AppFeatures.kt"] = buildString {
             appendLine("package ${c.pkg}.ui\n")
             appendLine("import ${coreUiPkg(c)}.Feature")
             c.allSlices.zip(names).forEach { (s, x) -> appendLine("import ${featuresPkg(c)}.$s.${x}Feature") }
+            if (koin) {
+                sliceKoinModules(c).forEach { (s, m) -> appendLine("import ${featuresPkg(c)}.$s.$m") }
+                appendLine("import org.koin.core.module.Module")
+            }
             appendLine("\nval features: List<Feature> = listOf(${names.joinToString { it + "Feature" }})")
+            if (koin) {
+                appendLine("\n/** Koin modules of the slices, loaded by [App]. */")
+                appendLine("val koinModules: List<Module> = listOf(${sliceKoinModules(c).joinToString { it.second }})")
+            }
         }
         f["$base/App.kt"] = """
             package ${c.pkg}.ui
@@ -332,9 +341,10 @@ class ProjectGenerator {
             import androidx.compose.runtime.mutableStateOf
             import androidx.compose.runtime.remember
             import androidx.compose.runtime.setValue
-
+            __KOIN_IMPORTS__
+            __KOIN_APP__
             @Composable
-            fun App() = MaterialTheme {
+            __SHELL__ = MaterialTheme {
                 Surface {
                     var selected by remember { mutableStateOf(0) }
                     Column {
@@ -348,6 +358,17 @@ class ProjectGenerator {
                 }
             }
         """.trimIndent()
+            .replace("__KOIN_IMPORTS__\n", if (koin) "import org.koin.compose.KoinApplication\nimport org.koin.dsl.koinConfiguration\n" else "")
+            .replace("__KOIN_APP__\n", if (koin) "\n" + """
+                |/** One configuration for the app's lifetime; Koin is started once, not on every recomposition. */
+                |private val koinConfiguration = koinConfiguration { modules(koinModules) }
+                |
+                |/** Starts Koin (for koinViewModel() and koinInject() in the slices) around the app shell. */
+                |@Composable
+                |fun App() = KoinApplication(configuration = koinConfiguration) { AppShell() }
+                |
+            """.trimMargin() + "\n" else "\n")
+            .replace("__SHELL__", if (koin) "private fun AppShell()" else "fun App()")
         // iOS has no Gradle entry-point module; its view controller lives with the UI that the framework exports.
         if (c.has(Target.IOS)) f["app/sharedUI/src/iosMain/kotlin/${c.appDir("ios")}/MainViewController.kt"] = """
             package ${c.appPkg("ios")}

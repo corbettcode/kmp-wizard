@@ -6,7 +6,7 @@ import kmpwizard.Target
 // ---------- feature/<slice>/: each vertical slice is its own directory, split into modules by where code runs ----------
 //
 //   feature/<slice>/shared   KMP, every target    domain/ (entities, repository interfaces, use cases), data/ (repos, wire DTOs)
-//   feature/<slice>/client   KMP + Compose        presentation/, <Slice>Feature.kt, HTTP adapters   (when a UI target is picked)
+//   feature/<slice>/client   KMP + Compose        presentation/ (screens, ViewModels), <Slice>Feature.kt, HTTP adapters   (when a UI target is picked)
 //   feature/<slice>/server   kotlin("jvm")        server/ (Ktor routes, server-only adapters)        (when Server is picked)
 //
 // All three use the package <pkg>.features.<slice>. Separate modules keep server code out of the client
@@ -43,6 +43,13 @@ fun featureModulePaths(c: ProjectContext) = buildList {
         if (c.has(Target.SERVER)) add(":feature:$s:server")
     }
 }
+
+/**
+ * Koin modules the slices' client modules declare, as (slice, top-level val name). Only the Todo sample has one;
+ * app/sharedUI's AppFeatures lists them for App to load.
+ */
+fun sliceKoinModules(c: ProjectContext): List<Pair<String, String>> =
+    if (c.lib("koin") && c.todo && c.hasUi) listOf(TODO_SLICE to "${TODO_SLICE}Module") else emptyList()
 
 /** Kotlin accessor of a slice module, e.g. `projects.feature.todo.client`. */
 fun sliceProject(s: String, module: String) = "projects.feature.$s.$module"
@@ -114,6 +121,11 @@ private fun sliceClient(c: ProjectContext, s: String, f: MutableMap<String, Stri
             add("api(projects.coreUI)")
             add("implementation(libs.compose.foundation)")
             add("implementation(libs.compose.material3)")
+            if (c.lib("koin")) {
+                // ViewModels (androidx-lifecycle, via Koin): koinViewModel() in screens, viewModelOf() in Koin modules.
+                add("implementation(libs.koin.composeViewmodel)")
+                add("implementation(libs.koin.coreViewmodel)")
+            }
             if (todo) {
                 add("implementation(libs.ktor.client.core)")
                 add("implementation(libs.ktor.client.content.negotiation)")
