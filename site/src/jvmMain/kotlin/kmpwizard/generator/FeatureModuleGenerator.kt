@@ -3,11 +3,13 @@ package kmpwizard.generator
 import kmpwizard.TODO_SLICE
 import kmpwizard.Target
 
-// ---------- feature/<slice>/: each vertical slice is its own directory, split into modules by where code runs ----------
+// ---------- feature/<slice>/: each vertical slice is its own directory, split into modules by where code runs ------
 //
-//   feature/<slice>/shared   KMP, every target    domain/ (entities, repository interfaces, use cases), data/ (repos, wire DTOs)
-//   feature/<slice>/client   KMP + Compose        presentation/ (screens, ViewModels), <Slice>Feature.kt, HTTP adapters   (when a UI target is picked)
-//   feature/<slice>/server   kotlin("jvm")        server/ (Ktor routes, server-only adapters)        (when Server is picked)
+//   feature/<slice>/shared   KMP, every target   domain/ (entities, repository interfaces, use cases),
+//                                                data/ (repos, wire DTOs)
+//   feature/<slice>/client   KMP + Compose       presentation/ (screens, ViewModels), <Slice>Feature.kt,
+//                                                HTTP adapters (when a UI target is picked)
+//   feature/<slice>/server   kotlin("jvm")       server/ (Ktor routes, server-only adapters) (when Server is picked)
 //
 // All three use the package <pkg>.<slice>. Separate modules keep server code out of the client
 // apps and Compose out of the server (Kotlin doesn't allow two JVM targets in one module).
@@ -15,19 +17,31 @@ import kmpwizard.Target
 // The Feature interface the app shell renders lives in coreUI, shared by every slice's client module.
 
 /** Package of slice [s]: `<pkg>.<slice>`, shared by its shared, client and server modules. */
-fun slicePkg(c: ProjectContext, s: String) = "${c.pkg}.$s"
+fun slicePkg(
+    c: ProjectContext
+    , s: String
+) = "${c.pkg}.$s"
 
 /** Package of coreUI: UI kernel shared by the slices' client modules and the app shell, e.g. [Feature]. */
-fun coreUiPkg(c: ProjectContext) = "${c.pkg}.core.ui"
+fun coreUiPkg(
+    c: ProjectContext
+) = "${c.pkg}.core.ui"
 
 /** Directory of one slice module: `feature/<slice>/shared|client|server`. */
-private fun sliceModuleDir(s: String, module: String) = "feature/$s/$module"
+private fun sliceModuleDir(
+    s: String
+    , module: String
+) = "feature/$s/$module"
 
 /**
  * Source root, down to the slice's package, for one part of slice [s]:
  * `commonMain` / `commonTest` (shared module), `clientMain` (client module), `serverMain` (server module).
  */
-fun featureSrc(c: ProjectContext, s: String, part: String) = when (part) {
+fun featureSrc(
+    c: ProjectContext
+    , s: String
+    , part: String
+) = when (part) {
     "commonMain", "commonTest" -> "${sliceModuleDir(s, "shared")}/src/$part"
     "clientMain" -> "${sliceModuleDir(s, "client")}/src/commonMain"
     "serverMain" -> "${sliceModuleDir(s, "server")}/src/main"
@@ -35,7 +49,9 @@ fun featureSrc(c: ProjectContext, s: String, part: String) = when (part) {
 } + "/kotlin/${c.dir}/$s"
 
 /** Gradle project paths of every slice's modules, plus coreUI when there is a UI. */
-fun featureModulePaths(c: ProjectContext) = buildList {
+fun featureModulePaths(
+    c: ProjectContext
+) = buildList {
     if (c.hasUi) add(":coreUI")
     c.allSlices.forEach { s ->
         add(":feature:$s:shared")
@@ -48,13 +64,22 @@ fun featureModulePaths(c: ProjectContext) = buildList {
  * Koin modules the slices' client modules declare, as (slice, top-level val name). Only the Todo sample has one;
  * app/sharedUI's AppFeatures lists them for App to load.
  */
-fun sliceKoinModules(c: ProjectContext): List<Pair<String, String>> =
-    if (c.lib("koin") && c.todo && c.hasUi) listOf(TODO_SLICE to "${TODO_SLICE}Module") else emptyList()
+fun sliceKoinModules(
+    c: ProjectContext
+): List<Pair<String, String>> =
+    if (c.lib("koin") && c.todo && c.hasUi) listOf(TODO_SLICE to "${TODO_SLICE}Module")
+    else emptyList()
 
 /** Kotlin accessor of a slice module, e.g. `projects.feature.todo.client`. */
-fun sliceProject(s: String, module: String) = "projects.feature.$s.$module"
+fun sliceProject(
+    s: String
+    , module: String
+) = "projects.feature.$s.$module"
 
-fun featureModules(c: ProjectContext, f: MutableMap<String, String>) {
+fun featureModules(
+    c: ProjectContext
+    , f: MutableMap<String, String>
+) {
     if (c.hasUi) coreUiModule(c, f)
     c.allSlices.forEach { s ->
         sliceShared(c, s, f)
@@ -67,21 +92,35 @@ fun featureModules(c: ProjectContext, f: MutableMap<String, String>) {
  * Every slice has modules named shared, client and server (and the root has :server). A group per slice
  * and a unique module/archive name keep their Maven coordinates, Kotlin modules and jars apart.
  */
-private fun sliceIdentity(c: ProjectContext, s: String, module: String) =
-    ModuleIdentity(group = slicePkg(c, s), name = "feature-$s-$module")
+private fun sliceIdentity(
+    c: ProjectContext
+    , s: String
+    , module: String
+) = ModuleIdentity(
+    group = slicePkg(c, s)
+    , name = "feature-$s-$module"
+)
 
 /** UI kernel for the slices' client modules and the app shell: the [Feature] contract. */
-private fun coreUiModule(c: ProjectContext, f: MutableMap<String, String>) {
+private fun coreUiModule(
+    c: ProjectContext
+    , f: MutableMap<String, String>
+) {
     val deps = linkedMapOf(
         "commonMain" to listOf(
-            "api(projects.core)",
-            "api(libs.compose.runtime)",
-            "api(libs.compose.ui)",
-        ),
+            "api(projects.core)"
+            , "api(libs.compose.runtime)"
+            , "api(libs.compose.ui)"
+        )
     )
     f["coreUI/build.gradle.kts"] = kmpBuildScript(
-        c, namespace = coreUiPkg(c), compose = true, jvm = c.has(Target.DESKTOP), iosFramework = null,
-        plugins = emptyList(), deps = deps,
+        c
+        , namespace = coreUiPkg(c)
+        , compose = true
+        , jvm = c.has(Target.DESKTOP)
+        , iosFramework = null
+        , plugins = emptyList()
+        , deps = deps
     )
     f["coreUI/src/commonMain/kotlin/${c.dir}/core/ui/Feature.kt"] = """
         package ${coreUiPkg(c)}
@@ -97,9 +136,18 @@ private fun coreUiModule(c: ProjectContext, f: MutableMap<String, String>) {
 }
 
 /** Domain + data of slice [s], for clients and server alike. */
-private fun sliceShared(c: ProjectContext, s: String, f: MutableMap<String, String>) {
+private fun sliceShared(
+    c: ProjectContext
+    , s: String
+    , f: MutableMap<String, String>
+) {
     val deps = linkedMapOf<String, MutableList<String>>()
-    fun add(set: String, d: String) = deps.getOrPut(set) { mutableListOf() }.add(d)
+    fun add(
+        set: String
+        , d: String
+    ) = deps
+        .getOrPut(set) { mutableListOf() }
+        .add(d)
     add("commonMain", "api(projects.core)")
     add("commonTest", "implementation(kotlin(\"test\"))")
     add("commonTest", "implementation(libs.coroutines.test)")
@@ -107,14 +155,25 @@ private fun sliceShared(c: ProjectContext, s: String, f: MutableMap<String, Stri
     // The Todo sample's wire DTOs are @Serializable and shared by the HTTP client and the server.
     if (s == TODO_SLICE) add("commonMain", "implementation(libs.ktor.serialization.kotlinx.json)")
     f["${sliceModuleDir(s, "shared")}/build.gradle.kts"] = kmpBuildScript(
-        c, namespace = "${slicePkg(c, s)}.shared", compose = false, jvm = c.hasJvm, iosFramework = null,
-        plugins = c.corePlugins, deps = deps, junit = c.lib("kotest"), identity = sliceIdentity(c, s, "shared"),
+        c
+        , namespace = "${slicePkg(c, s)}.shared"
+        , compose = false
+        , jvm = c.hasJvm
+        , iosFramework = null
+        , plugins = c.corePlugins
+        , deps = deps
+        , junit = c.lib("kotest")
+        , identity = sliceIdentity(c, s, "shared")
     )
 }
 
 /** Compose screens, composition root and client-side adapters of slice [s]. */
-private fun sliceClient(c: ProjectContext, s: String, f: MutableMap<String, String>) {
-    val todo = s == TODO_SLICE
+private fun sliceClient(
+    c: ProjectContext
+    , s: String
+    , f: MutableMap<String, String>
+) {
+    val isTodo = s == TODO_SLICE
     val deps = linkedMapOf(
         "commonMain" to buildList {
             add("api(${sliceProject(s, "shared")})")
@@ -126,22 +185,31 @@ private fun sliceClient(c: ProjectContext, s: String, f: MutableMap<String, Stri
                 add("implementation(libs.koin.composeViewmodel)")
                 add("implementation(libs.koin.coreViewmodel)")
             }
-            if (todo) {
+            if (isTodo) {
                 add("implementation(libs.ktor.client.core)")
                 add("implementation(libs.ktor.client.content.negotiation)")
                 add("implementation(libs.ktor.serialization.kotlinx.json)")
             }
-        },
+        }
     )
     f["${sliceModuleDir(s, "client")}/build.gradle.kts"] = kmpBuildScript(
-        c, namespace = "${slicePkg(c, s)}.client", compose = true, jvm = c.has(Target.DESKTOP), iosFramework = null,
-        plugins = if (todo) listOf("kotlinSerialization") else emptyList(), deps = deps,
-        identity = sliceIdentity(c, s, "client"),
+        c
+        , namespace = "${slicePkg(c, s)}.client"
+        , compose = true
+        , jvm = c.has(Target.DESKTOP)
+        , iosFramework = null
+        , plugins = if (isTodo) listOf("kotlinSerialization") else emptyList()
+        , deps = deps
+        , identity = sliceIdentity(c, s, "client")
     )
 }
 
 /** Ktor routes and server-only adapters of slice [s]. */
-private fun sliceServer(c: ProjectContext, s: String, f: MutableMap<String, String>) {
+private fun sliceServer(
+    c: ProjectContext
+    , s: String
+    , f: MutableMap<String, String>
+) {
     val id = sliceIdentity(c, s, "server")
     f["${sliceModuleDir(s, "server")}/build.gradle.kts"] = """
         plugins {
@@ -164,18 +232,22 @@ private fun sliceServer(c: ProjectContext, s: String, f: MutableMap<String, Stri
 }
 
 /** Sources of one user-defined vertical slice: every layer in `<pkg>.<slice>`, under `feature/<slice>/`. */
-fun slice(c: ProjectContext, s: String, f: MutableMap<String, String>) {
+fun slice(
+    c: ProjectContext
+    , s: String
+    , f: MutableMap<String, String>
+) {
     val x = s.replaceFirstChar(Char::uppercase)
     val p = slicePkg(c, s)
     val b = featureSrc(c, s, "commonMain")
     val cb = featureSrc(c, s, "clientMain")
-    val arrow = c.lib("arrow")
+    val hasArrow = c.lib("arrow")
 
     // ----- domain -----
     f["$b/domain/${x}Item.kt"] = "package $p.domain\n\ndata class ${x}Item(val id: String, val title: String)\n"
     f["$b/domain/${x}Repository.kt"] =
         "package $p.domain\n\ninterface ${x}Repository {\n    suspend fun all(): List<${x}Item>\n}\n"
-    f["$b/domain/Get${x}ItemsUseCase.kt"] = if (arrow) """
+    f["$b/domain/Get${x}ItemsUseCase.kt"] = if (hasArrow) """
         package $p.domain
 
         import arrow.core.Either
@@ -207,8 +279,10 @@ fun slice(c: ProjectContext, s: String, f: MutableMap<String, String>) {
 
     // ----- presentation -----
     if (c.hasUi) {
-        val fold = if (arrow) "getItems().fold({ ${x}UiState.Error(it.toString()) }, { ${x}UiState.Loaded(it) })"
-        else "getItems().fold(onSuccess = { ${x}UiState.Loaded(it) }, onFailure = { ${x}UiState.Error(it.message ?: \"error\") })"
+        val fold =
+            if (hasArrow) "getItems().fold({ ${x}UiState.Error(it.toString()) }, { ${x}UiState.Loaded(it) })"
+            else "getItems().fold(onSuccess = { ${x}UiState.Loaded(it) }, " +
+                "onFailure = { ${x}UiState.Error(it.message ?: \"error\") })"
         f["$cb/presentation/${x}Screen.kt"] = """
             package $p.presentation
 
@@ -291,12 +365,15 @@ fun slice(c: ProjectContext, s: String, f: MutableMap<String, String>) {
             appendLine("    val getItems = Get${x}ItemsUseCase(InMemory${x}Repository())")
             appendLine("    get(\"/api/$s\") {")
             appendLine("        getItems().fold(")
-            if (arrow) {
+            if (hasArrow) {
                 appendLine("            { call.respond(HttpStatusCode.InternalServerError, it.toString()) },")
                 appendLine("            { items -> $ok },")
             } else {
                 appendLine("            onSuccess = { items -> $ok },")
-                appendLine("            onFailure = { call.respond(HttpStatusCode.InternalServerError, it.message ?: \"error\") },")
+                appendLine(
+                    "            onFailure = { call.respond(HttpStatusCode.InternalServerError, " +
+                        "it.message ?: \"error\") },"
+                )
             }
             appendLine("        )")
             appendLine("    }")
