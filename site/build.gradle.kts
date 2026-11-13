@@ -26,6 +26,12 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
     }
 }
 
+// Bundles this repo's CLAUDE.md into the API jar as kmpwizard/CLAUDE.md; every generated project ships a copy.
+val bundleClaudeMd = tasks.register<Sync>("bundleClaudeMd") {
+    from(rootProject.file("CLAUDE.md"))
+    into(layout.buildDirectory.dir("generated/claudeMd/resources/kmpwizard"))
+}
+
 kotlin {
     configAsKobwebApplication(includeServer = true)
 
@@ -44,6 +50,9 @@ kotlin {
             implementation(libs.kobweb.silk)
         }
 
+        jvmMain {
+            resources.srcDir(bundleClaudeMd.map { it.destinationDir.parentFile })
+        }
         jvmMain.dependencies {
             compileOnly(libs.kobweb.api) // Provided by Kobweb backend at runtime
             implementation(libs.jgit) // Builds the optional git repo inside generated projects

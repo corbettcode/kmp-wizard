@@ -70,6 +70,16 @@ class ProjectGenerator {
         return zip(c.slug, entries)
     }
 
+    /** A text file bundled into the API jar (see `bundleClaudeMd` in site/build.gradle.kts). */
+    private fun resourceText(
+        path: String
+    ): String = ProjectGenerator::class.java
+        .getResourceAsStream(path)
+        ?.use {
+            it.readBytes().decodeToString()
+        }
+        ?: error("Missing resource $path")
+
     private fun wrapperFiles(): Map<String, ByteArray> = WRAPPER_FILES.mapValues { (_, name) ->
         val res = "/kmpwizard/wrapper/$name"
         ProjectGenerator::class.java
@@ -239,6 +249,7 @@ class ProjectGenerator {
         f[".gitignore"] = "build/\n.gradle/\n.idea/\n.kotlin/\nlocal.properties\n*.iml\nxcuserdata/\n"
         f["gradle/libs.versions.toml"] = versionCatalog(c)
         f["README.md"] = readme(c)
+        f["CLAUDE.md"] = resourceText("/kmpwizard/CLAUDE.md")
     }
 
     /** Local services the project needs (MongoDB for the Todo sample, PostgreSQL for Flyway); null if none. */

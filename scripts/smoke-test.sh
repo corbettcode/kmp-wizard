@@ -62,6 +62,7 @@ status=$(curl -sS -o "$TMP/project.zip" -w '%{http_code}' -X POST "$BASE/api/gen
 [[ "$status" == "200" ]] || fail "/api/generate returned HTTP $status: $(head -c 500 "$TMP/project.zip")"
 unzip -l "$TMP/project.zip" > "$TMP/listing.txt" 2>&1 || fail "/api/generate did not return a valid ZIP"
 grep -q "settings.gradle.kts" "$TMP/listing.txt" || fail "generated ZIP has no settings.gradle.kts"
+grep -q "smoketest/CLAUDE.md" "$TMP/listing.txt" || fail "generated ZIP has no CLAUDE.md"
 
 echo "==> POST /api/generate rejects a malformed spec"
 status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE/api/generate" --data 'not json')
