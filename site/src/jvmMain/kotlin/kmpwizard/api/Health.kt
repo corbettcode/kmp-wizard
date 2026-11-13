@@ -12,10 +12,15 @@ import com.varabyte.kobweb.api.http.bodyOf
  * API jar is loaded, which a static page like `/` does not.
  */
 @Api
-suspend fun health(ctx: ApiContext) {
+suspend fun health(
+    ctx: ApiContext
+) {
     if (ctx.req.method != HttpMethod.GET) {
         ctx.res.status = 405
         return
     }
-    ctx.res.body = bodyOf("ok", contentType = "text/plain")
+    ctx.res.body = bodyOf(
+        "ok"
+        , contentType = "text/plain"
+    )
 }

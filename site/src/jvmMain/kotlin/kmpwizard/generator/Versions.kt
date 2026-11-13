@@ -1,6 +1,5 @@
 package kmpwizard.generator
 
-
 // Pinned versions of the GENERATED project. Bump these in one place.
 // When bumping GRADLE, refresh the wrapper files in resources/kmpwizard/wrapper/ too
 // (run `./gradlew wrapper --gradle-version <new>` in this repo, then copy gradlew, gradlew.bat, gradle-wrapper.jar).

@@ -14,7 +14,9 @@ private val json = Json { ignoreUnknownKeys = true }
 
 /** POST /api/generate  (body: ProjectSpec JSON)  ->  application/zip */
 @Api
-suspend fun generate(ctx: ApiContext) {
+suspend fun generate(
+    ctx: ApiContext
+) {
     if (ctx.req.method != HttpMethod.POST) {
         ctx.res.status = 405
         return
@@ -32,5 +34,8 @@ suspend fun generate(ctx: ApiContext) {
         ctx.res.body = bodyOf(errors.joinToString("\n"))
         return
     }
-    ctx.res.body = bodyOf(ProjectGenerator().generate(spec), contentType = "application/zip")
+    ctx.res.body = bodyOf(
+        ProjectGenerator().generate(spec)
+        , contentType = "application/zip"
+    )
 }

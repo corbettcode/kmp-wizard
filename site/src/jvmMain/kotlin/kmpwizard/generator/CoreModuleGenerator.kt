@@ -1,6 +1,6 @@
 package kmpwizard.generator
 
-// ---------- core: shared kernel for every slice (logging, errors, server URL). Slices live in feature/<slice>/ ----------
+// ---------- core: shared kernel for every slice (logging, errors, server URL). Slices live in feature/<slice>/ -------
 
 fun coreModule(
     c: ProjectContext
@@ -11,19 +11,29 @@ fun coreModule(
     fun add(
         set: String
         , d: String
-    ) = deps.getOrPut(set) {
-        mutableListOf()
-    }
+    ) = deps
+        .getOrPut(set) {
+            mutableListOf()
+        }
         .add(d)
 
     add("commonMain", "api(libs.coroutines.core)")
     add("commonTest", "implementation(kotlin(\"test\"))")
     add("commonTest", "implementation(libs.coroutines.test)")
 
-    c.libraryDependencies().forEach { (set, d) -> add(set, d) }
+    c.libraryDependencies()
+        .forEach { (set, d) ->
+            add(set, d)
+        }
     f["core/build.gradle.kts"] = kmpBuildScript(
-        c, namespace = "${c.pkg}.core", compose = false, jvm = c.hasJvm, iosFramework = null,
-        plugins = c.corePlugins, deps = deps, junit = c.lib("kotest"),
+        c
+        , namespace = "${c.pkg}.core"
+        , hasCompose = false
+        , hasJvm = c.hasJvm
+        , iosFramework = null
+        , plugins = c.corePlugins
+        , deps = deps
+        , usesJUnit = c.lib("kotest")
     )
 
     val base = "core/src/commonMain/kotlin/${c.dir}"
@@ -42,6 +52,9 @@ fun coreModule(
                 fun d(message: () -> String) = println(message())
             }
         """.trimIndent()
+    // The Todo sample's use cases also report invalid input and unknown ids.
+    val todoErrors = "    data class Invalid(override val message: String) : DomainError\n" +
+        "    data class NotFound(override val message: String) : DomainError\n"
     if (c.lib("arrow")) f["$base/core/DomainError.kt"] = """
             package ${c.pkg}.core
 
@@ -49,5 +62,8 @@ fun coreModule(
                 val message: String
                 data class Unexpected(override val message: String) : DomainError
             }
-        """.trimIndent().let { if (c.todo) it.replace("    data class Unexpected", "    data class Invalid(override val message: String) : DomainError\n    data class NotFound(override val message: String) : DomainError\n    data class Unexpected") else it }
+        """.trimIndent()
+        .let {
+            if (c.hasTodo) it.replace("    data class Unexpected", todoErrors + "    data class Unexpected") else it
+        }
 }

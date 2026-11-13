@@ -39,16 +39,19 @@ const val IOS_FRAMEWORK = "sharedUI"
 /** Identity on the optional initial commit; the server has no idea who the user is. */
 private const val GIT_AUTHOR_NAME = "KMP Wizard"
 private const val GIT_AUTHOR_EMAIL = "kmp-wizard@localhost"
+
 /** Wrapper files copied verbatim from resources, keyed by their path in the generated project. */
 private val WRAPPER_FILES = mapOf(
-    "gradlew" to "gradlew",
-    "gradlew.bat" to "gradlew.bat",
-    "gradle/wrapper/gradle-wrapper.jar" to "gradle-wrapper.jar",
+    "gradlew" to "gradlew"
+    , "gradlew.bat" to "gradlew.bat"
+    , "gradle/wrapper/gradle-wrapper.jar" to "gradle-wrapper.jar"
 )
 private val EXECUTABLES = setOf("gradlew")
 
 class ProjectGenerator {
-    fun generate(spec: ProjectSpecification): ByteArray {
+    fun generate(
+        spec: ProjectSpecification
+    ): ByteArray {
         val c = ProjectContext(spec)
         val files = linkedMapOf<String, String>()
         rootFiles(c, files)
@@ -56,7 +59,7 @@ class ProjectGenerator {
         featureModules(c, files)
         if (c.hasUi) sharedUiModule(c, files)
         spec.slices.forEach { slice(c, it, files) }
-        if (c.todo) todoSample(c, files)
+        if (c.hasTodo) todoSample(c, files)
         if (c.has(Target.ANDROID)) androidApp(c, files)
         if (c.has(Target.DESKTOP)) desktopApp(c, files)
         if (c.has(Target.WEB)) webApp(c, files)
@@ -69,7 +72,11 @@ class ProjectGenerator {
 
     private fun wrapperFiles(): Map<String, ByteArray> = WRAPPER_FILES.mapValues { (_, name) ->
         val res = "/kmpwizard/wrapper/$name"
-        ProjectGenerator::class.java.getResourceAsStream(res)?.use { it.readBytes() }
+        ProjectGenerator::class.java
+            .getResourceAsStream(res)
+            ?.use {
+                it.readBytes()
+            }
             ?: error("Missing resource $res")
     }
 
@@ -79,25 +86,55 @@ class ProjectGenerator {
      * Directories map to null: git needs its empty ones (e.g. `.git/objects/`) to recognise the repo.
      */
     @OptIn(ExperimentalPathApi::class)
-    private fun withGitRepo(files: Map<String, ByteArray>, message: String): Map<String, ByteArray?> {
+    private fun withGitRepo(
+        files: Map<String, ByteArray>
+        , message: String
+    ): Map<String, ByteArray?> {
         val dir = Files.createTempDirectory("kmp-wizard-")
         try {
             files.forEach { (path, content) ->
                 val file = dir.resolve(path).apply { parent.createDirectories() }
                 file.writeBytes(content)
                 // Git records the executable bit from the file system.
-                if (path in EXECUTABLES) runCatching { file.setPosixFilePermissions(PosixFilePermissions.fromString("rwxr-xr-x")) }
-            }
-            Git.init().setDirectory(dir.toFile()).setInitialBranch("main").call().use { git ->
-                if (message.isNotEmpty()) {
-                    git.add().addFilepattern(".").call()
-                    val who = PersonIdent(GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL)
-                    git.commit().setMessage(message).setAuthor(who).setCommitter(who).setSign(false).call()
+                if (path in EXECUTABLES) runCatching {
+                    file.setPosixFilePermissions(PosixFilePermissions.fromString("rwxr-xr-x"))
                 }
             }
-            return dir.walk(PathWalkOption.INCLUDE_DIRECTORIES).filter { it != dir }
-                .map { it.relativeTo(dir).invariantSeparatorsPathString to it }.sortedBy { it.first }
-                .associate { (rel, p) -> if (p.isDirectory()) "$rel/" to null else rel to p.readBytes() }
+            Git
+                .init()
+                .setDirectory(dir.toFile())
+                .setInitialBranch("main")
+                .call()
+                .use { git ->
+                    if (message.isNotEmpty()) {
+                        git
+                            .add()
+                            .addFilepattern(".")
+                            .call()
+                        val who = PersonIdent(GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL)
+                        git
+                            .commit()
+                            .setMessage(message)
+                            .setAuthor(who)
+                            .setCommitter(who)
+                            .setSign(false)
+                            .call()
+                    }
+                }
+            return dir
+                .walk(PathWalkOption.INCLUDE_DIRECTORIES)
+                .filter {
+                    it != dir
+                }
+                .map {
+                    it.relativeTo(dir).invariantSeparatorsPathString to it
+                }
+                .sortedBy {
+                    it.first
+                }
+                .associate { (rel, p) ->
+                    if (p.isDirectory()) "$rel/" to null else rel to p.readBytes()
+                }
         } finally {
             dir.deleteRecursively()
         }
@@ -107,7 +144,10 @@ class ProjectGenerator {
      * [files] maps relative paths to contents; a null value is a directory (path ending in `/`).
      * Entries carry Unix modes so [EXECUTABLES] (e.g. `gradlew`) stay executable when unzipped.
      */
-    private fun zip(root: String, files: Map<String, ByteArray?>): ByteArray {
+    private fun zip(
+        root: String
+        , files: Map<String, ByteArray?>
+    ): ByteArray {
         val bos = ByteArrayOutputStream()
         ZipArchiveOutputStream(bos).use { z ->
             files.forEach { (path, content) ->
@@ -127,7 +167,10 @@ class ProjectGenerator {
 
     // ---------- root ----------
 
-    private fun rootFiles(c: ProjectContext, f: MutableMap<String, String>) {
+    private fun rootFiles(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
         val mods = buildList {
             add(":core")
             addAll(featureModulePaths(c))
@@ -199,9 +242,11 @@ class ProjectGenerator {
     }
 
     /** Local services the project needs (MongoDB for the Todo sample, PostgreSQL for Flyway); null if none. */
-    private fun dockerCompose(c: ProjectContext): String? {
+    private fun dockerCompose(
+        c: ProjectContext
+    ): String? {
         val services = buildList {
-            if (c.todo) add("Todo sample" to ("""
+            if (c.hasTodo) add("Todo sample" to ("""
                 mongo:
                   # The 8.0 long-term-support line. Newer 8.x images (8.3) refuse to start on
                   # Linux kernels 6.19-7.0.13 (MongoDB SERVER-121912 / SERVER-136848).
@@ -224,7 +269,9 @@ class ProjectGenerator {
     }
 
     /** Each section's entries are sorted by key. */
-    private fun versionCatalog(c: ProjectContext) = buildString {
+    private fun versionCatalog(
+        c: ProjectContext
+    ) = buildString {
         val v = sortedMapOf("kotlin" to KOTLIN, "coroutines" to COROUTINES)
         if (c.hasUi) {
             v["compose"] = COMPOSE
@@ -234,15 +281,24 @@ class ProjectGenerator {
             v["agp"] = AGP
             v["activity"] = ACTIVITY
         }
-        c.activeLibs.forEach { v[it.versionKey] = it.version; v.putAll(it.extraVersions) }
+        c.activeLibs.forEach {
+            v[it.versionKey] = it.version
+            v.putAll(it.extraVersions)
+        }
         if (c.has(Target.SERVER)) v["ktor"] = KTOR
-        if (c.has(Target.SERVER) || desktopLogback(c)) v["logback"] = LOGBACK
-        if (c.todo) v["mongodb"] = MONGODB
+        if (c.has(Target.SERVER) || needsDesktopLogback(c)) v["logback"] = LOGBACK
+        if (c.hasTodo) v["mongodb"] = MONGODB
         if (c.lib(FlywayGenerator.ID)) FlywayGenerator.versions(v)
 
         // alias -> (module, version ref)
         val libs = sortedMapOf<String, Pair<String, String>>()
-        fun lib(alias: String, module: String, ref: String) { libs[alias] = module to ref }
+        fun lib(
+            alias: String
+            , module: String
+            , ref: String
+        ) {
+            libs[alias] = module to ref
+        }
         lib("coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core", "coroutines")
         lib("coroutines-test", "org.jetbrains.kotlinx:kotlinx-coroutines-test", "coroutines")
         if (c.hasUi) {
@@ -251,8 +307,12 @@ class ProjectGenerator {
             lib("compose-foundation", "org.jetbrains.compose.foundation:foundation", "compose")
             lib("compose-material3", "org.jetbrains.compose.material3:material3", "compose-material3")
         }
-        if (c.has(Target.DESKTOP)) lib("coroutines-swing", "org.jetbrains.kotlinx:kotlinx-coroutines-swing", "coroutines")
-        if (c.has(Target.ANDROID)) lib("androidx-activity-compose", "androidx.activity:activity-compose", "activity")
+        if (c.has(Target.DESKTOP)) {
+            lib("coroutines-swing", "org.jetbrains.kotlinx:kotlinx-coroutines-swing", "coroutines")
+        }
+        if (c.has(Target.ANDROID)) {
+            lib("androidx-activity-compose", "androidx.activity:activity-compose", "activity")
+        }
         c.activeLibs.forEach { l -> l.arts.forEach { lib(it.alias, it.module, l.versionKey) } }
         if (c.has(Target.SERVER)) {
             lib("ktor-server-core", "io.ktor:ktor-server-core", "ktor")
@@ -261,8 +321,10 @@ class ProjectGenerator {
             lib("ktor-serialization-kotlinx-json", "io.ktor:ktor-serialization-kotlinx-json", "ktor")
             lib("ktor-server-test-host", "io.ktor:ktor-server-test-host", "ktor")
         }
-        if (c.has(Target.SERVER) || desktopLogback(c)) lib("logback", "ch.qos.logback:logback-classic", "logback")
-        if (c.todo) {
+        if (c.has(Target.SERVER) || needsDesktopLogback(c)) {
+            lib("logback", "ch.qos.logback:logback-classic", "logback")
+        }
+        if (c.hasTodo) {
             lib("ktor-client-content-negotiation", "io.ktor:ktor-client-content-negotiation", "ktor")
             lib("ktor-server-cors", "io.ktor:ktor-server-cors", "ktor")
             lib("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine", "mongodb")
@@ -271,7 +333,13 @@ class ProjectGenerator {
 
         // alias -> (plugin id, version ref)
         val plugins = sortedMapOf<String, Pair<String, String>>()
-        fun plugin(alias: String, id: String, ref: String) { plugins[alias] = id to ref }
+        fun plugin(
+            alias: String
+            , id: String
+            , ref: String
+        ) {
+            plugins[alias] = id to ref
+        }
         plugin("kotlinMultiplatform", "org.jetbrains.kotlin.multiplatform", "kotlin")
         if (c.hasJvm) plugin("kotlinJvm", "org.jetbrains.kotlin.jvm", "kotlin")
         if (c.hasUi) {
@@ -287,42 +355,63 @@ class ProjectGenerator {
         appendLine("[versions]")
         v.forEach { (k, x) -> appendLine("$k = \"$x\"") }
         appendLine("\n[libraries]")
-        libs.forEach { (alias, m) -> appendLine("$alias = { module = \"${m.first}\", version.ref = \"${m.second}\" }") }
+        libs.forEach { (alias, m) ->
+            appendLine("$alias = { module = \"${m.first}\", version.ref = \"${m.second}\" }")
+        }
         appendLine("\n[plugins]")
-        plugins.forEach { (alias, p) -> appendLine("$alias = { id = \"${p.first}\", version.ref = \"${p.second}\" }") }
+        plugins.forEach { (alias, p) ->
+            appendLine("$alias = { id = \"${p.first}\", version.ref = \"${p.second}\" }")
+        }
     }
 
     // ---------- app/sharedUI: Compose shell that renders each slice's Feature ----------
 
-    private fun sharedUiModule(c: ProjectContext, f: MutableMap<String, String>) {
+    private fun sharedUiModule(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
+        val hasKoin = c.lib("koin")
         val deps = linkedMapOf(
             "commonMain" to listOf("api(projects.coreUI)") +
-                c.allSlices.map { "implementation(${sliceProject(it, "client")})" } + listOf(
-                "implementation(libs.compose.foundation)",
-                "implementation(libs.compose.material3)",
-            ) + if (c.lib("koin")) listOf(
-                "implementation(libs.koin.compose)",
-                "implementation(libs.koin.composeViewmodel)",
-            ) else emptyList(),
+                c.allSlices.map { "implementation(${sliceProject(it, "client")})" } +
+                listOf(
+                    "implementation(libs.compose.foundation)"
+                    , "implementation(libs.compose.material3)"
+                ) +
+                if (hasKoin) listOf(
+                    "implementation(libs.koin.compose)"
+                    , "implementation(libs.koin.composeViewmodel)"
+                ) else emptyList()
         )
         f["app/sharedUI/build.gradle.kts"] = kmpBuildScript(
-            c, namespace = "${c.pkg}.ui", compose = true, jvm = c.has(Target.DESKTOP), iosFramework = IOS_FRAMEWORK,
-            plugins = emptyList(), deps = deps,
+            c
+            , namespace = "${c.pkg}.ui"
+            , hasCompose = true
+            , hasJvm = c.has(Target.DESKTOP)
+            , iosFramework = IOS_FRAMEWORK
+            , plugins = emptyList()
+            , deps = deps
         )
 
         val base = "app/sharedUI/src/commonMain/kotlin/${c.dir}/ui"
         val names = c.allSlices.map { it.replaceFirstChar(Char::uppercase) }
-        val koin = c.lib("koin")
         f["$base/AppFeatures.kt"] = buildString {
             appendLine("package ${c.pkg}.ui\n")
             appendLine("import ${coreUiPkg(c)}.Feature")
-            c.allSlices.zip(names).forEach { (s, x) -> appendLine("import ${slicePkg(c, s)}.${x}Feature") }
-            if (koin) {
-                sliceKoinModules(c).forEach { (s, m) -> appendLine("import ${slicePkg(c, s)}.$m") }
+            c.allSlices
+                .zip(names)
+                .forEach { (s, x) ->
+                    appendLine("import ${slicePkg(c, s)}.${x}Feature")
+                }
+            if (hasKoin) {
+                sliceKoinModules(c)
+                    .forEach { (s, m) ->
+                        appendLine("import ${slicePkg(c, s)}.$m")
+                    }
                 appendLine("import org.koin.core.module.Module")
             }
             appendLine("\nval features: List<Feature> = listOf(${names.joinToString { it + "Feature" }})")
-            if (koin) {
+            if (hasKoin) {
                 appendLine("\n/** Koin modules of the slices, loaded by [App]. */")
                 appendLine("val koinModules: List<Module> = listOf(${sliceKoinModules(c).joinToString { it.second }})")
             }
@@ -358,8 +447,13 @@ class ProjectGenerator {
                 }
             }
         """.trimIndent()
-            .replace("__KOIN_IMPORTS__\n", if (koin) "import org.koin.compose.KoinApplication\nimport org.koin.dsl.koinConfiguration\n" else "")
-            .replace("__KOIN_APP__\n", if (koin) "\n" + """
+            .replace(
+                "__KOIN_IMPORTS__\n"
+                , if (hasKoin) {
+                    "import org.koin.compose.KoinApplication\nimport org.koin.dsl.koinConfiguration\n"
+                } else ""
+            )
+            .replace("__KOIN_APP__\n", if (hasKoin) "\n" + """
                 |/** One configuration for the app's lifetime; Koin is started once, not on every recomposition. */
                 |private val koinConfiguration = koinConfiguration { modules(koinModules) }
                 |
@@ -368,7 +462,7 @@ class ProjectGenerator {
                 |fun App() = KoinApplication(configuration = koinConfiguration) { AppShell() }
                 |
             """.trimMargin() + "\n" else "\n")
-            .replace("__SHELL__", if (koin) "private fun AppShell()" else "fun App()")
+            .replace("__SHELL__", if (hasKoin) "private fun AppShell()" else "fun App()")
         // iOS has no Gradle entry-point module; its view controller lives with the UI that the framework exports.
         if (c.has(Target.IOS)) f["app/sharedUI/src/iosMain/kotlin/${c.appDir("ios")}/MainViewController.kt"] = """
             package ${c.appPkg("ios")}
@@ -382,7 +476,10 @@ class ProjectGenerator {
 
     // ---------- app/: platform entry points ----------
 
-    private fun androidApp(c: ProjectContext, f: MutableMap<String, String>) {
+    private fun androidApp(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
         f["app/androidApp/build.gradle.kts"] = """
             plugins {
                 alias(libs.plugins.androidApplication)
@@ -413,8 +510,8 @@ class ProjectGenerator {
         """.trimIndent()
         f["app/androidApp/src/main/AndroidManifest.xml"] = """
             <?xml version="1.0" encoding="utf-8"?>
-            <manifest xmlns:android="http://schemas.android.com/apk/res/android">${if (c.todo) "\n                <uses-permission android:name=\"android.permission.INTERNET\" />" else ""}
-                <application android:label="${c.spec.name.replace("\"", "")}"${if (c.todo) " android:usesCleartextTraffic=\"true\"" else ""} android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android">${if (c.hasTodo) "\n                <uses-permission android:name=\"android.permission.INTERNET\" />" else ""}
+                <application android:label="${c.spec.name.replace("\"", "")}"${if (c.hasTodo) " android:usesCleartextTraffic=\"true\"" else ""} android:theme="@android:style/Theme.Material.Light.NoActionBar">
                     <activity android:name=".MainActivity" android:exported="true">
                         <intent-filter>
                             <action android:name="android.intent.action.MAIN" />
@@ -442,9 +539,14 @@ class ProjectGenerator {
     }
 
     /** The desktop app gets the Ktor client's slf4j-api on its classpath, so it needs a logging backend. */
-    private fun desktopLogback(c: ProjectContext) = c.has(Target.DESKTOP) && c.lib("ktor")
+    private fun needsDesktopLogback(
+        c: ProjectContext
+    ) = c.has(Target.DESKTOP) && c.lib("ktor")
 
-    private fun desktopApp(c: ProjectContext, f: MutableMap<String, String>) {
+    private fun desktopApp(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
         f["app/desktopApp/build.gradle.kts"] = """
             import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
@@ -470,11 +572,15 @@ class ProjectGenerator {
                     }
                 }
             }
-        """.trimIndent().replace(
-            "__LOGBACK__",
-            if (desktopLogback(c)) "\n    // The Ktor client logs through SLF4J; without a backend it prints \"No SLF4J providers were found\".\n    runtimeOnly(libs.logback)" else "",
-        )
-        if (desktopLogback(c)) f["app/desktopApp/src/main/resources/logback.xml"] = """
+        """.trimIndent()
+            .replace(
+                "__LOGBACK__"
+                , if (needsDesktopLogback(c)) {
+                    "\n    // The Ktor client logs through SLF4J; without a backend it prints " +
+                        "\"No SLF4J providers were found\".\n    runtimeOnly(libs.logback)"
+                } else ""
+            )
+        if (needsDesktopLogback(c)) f["app/desktopApp/src/main/resources/logback.xml"] = """
             <configuration>
                 <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
                     <encoder><pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern></encoder>
@@ -495,7 +601,10 @@ class ProjectGenerator {
         """.trimIndent()
     }
 
-    private fun webApp(c: ProjectContext, f: MutableMap<String, String>) {
+    private fun webApp(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
         f["app/webApp/build.gradle.kts"] = """
             import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
@@ -544,7 +653,10 @@ class ProjectGenerator {
         """.trimIndent()
     }
 
-    private fun iosApp(c: ProjectContext, f: MutableMap<String, String>) {
+    private fun iosApp(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
         f["app/iosApp/iosApp/iOSApp.swift"] = """
             import SwiftUI
 
@@ -575,7 +687,7 @@ class ProjectGenerator {
             3. Set "User Script Sandboxing" to No and add `${'$'}(SRCROOT)/../sharedUI/build/xcode-frameworks/${'$'}(CONFIGURATION)/${'$'}(SDK_NAME)` to Framework Search Paths.
 
             Swift imports the framework as `$IOS_FRAMEWORK` (its `baseName` in `app/sharedUI/build.gradle.kts`).
-        """.trimIndent() + if (c.todo) "\n\n" + """
+        """.trimIndent() + if (c.hasTodo) "\n\n" + """
             The Todo tab calls the server over plain HTTP. In `Info.plist` add
             `NSAppTransportSecurity` > `NSAllowsLocalNetworking` = YES so the simulator can reach `localhost`.
         """.trimIndent() else ""
@@ -583,11 +695,14 @@ class ProjectGenerator {
 
     // ---------- server: Ktor bootstrap; each slice's routes come from its :feature:<slice>:server module ----------
 
-    private fun server(c: ProjectContext, f: MutableMap<String, String>) {
+    private fun server(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
         val sp = c.appPkg("server")
         val sd = c.appDir("server")
         val slices = c.spec.slices.map { it to it.replaceFirstChar(Char::uppercase) }
-        val flyway = c.lib(FlywayGenerator.ID)
+        val hasFlyway = c.lib(FlywayGenerator.ID)
         f["server/build.gradle.kts"] = """
             plugins {
                 alias(libs.plugins.kotlinJvm)
@@ -607,18 +722,22 @@ class ProjectGenerator {
                 implementation(libs.ktor.server.netty)
                 implementation(libs.ktor.server.content.negotiation)
                 implementation(libs.ktor.serialization.kotlinx.json)
-                implementation(libs.logback)${if (c.todo) """
+                implementation(libs.logback)${if (c.hasTodo) """
                 implementation(libs.ktor.server.cors)
                 implementation(libs.mongodb.driver.kotlin.coroutine)""" else ""}${
-                    if (flyway) FlywayGenerator.serverDependencies.joinToString("") { "\n                $it" } else ""}
+                    if (hasFlyway) {
+                        FlywayGenerator.serverDependencies.joinToString("") { "\n                $it" }
+                    } else ""}
                 testImplementation(kotlin("test"))
                 testImplementation(libs.ktor.server.test.host)
             }
 
             tasks.test { useJUnitPlatform() }
-        """.trimIndent().replace(
-            "__SLICE_SERVERS__", c.allSlices.joinToString("\n    ") { "implementation(${sliceProject(it, "server")})" },
-        )
+        """.trimIndent()
+            .replace(
+                "__SLICE_SERVERS__"
+                , c.allSlices.joinToString("\n    ") { "implementation(${sliceProject(it, "server")})" }
+            )
         f["server/src/main/kotlin/$sd/Application.kt"] = buildString {
             appendLine("package $sp\n")
             appendLine("import io.ktor.serialization.kotlinx.json.json")
@@ -629,7 +748,7 @@ class ProjectGenerator {
             appendLine("import io.ktor.server.response.respondText")
             appendLine("import io.ktor.server.routing.get")
             appendLine("import io.ktor.server.routing.routing")
-            if (c.todo) {
+            if (c.hasTodo) {
                 appendLine("import io.ktor.http.HttpHeaders")
                 appendLine("import io.ktor.http.HttpMethod")
                 appendLine("import io.ktor.server.application.ApplicationStopped")
@@ -645,13 +764,17 @@ class ProjectGenerator {
                 appendLine("import ${slicePkg(c, TODO_SLICE)}.server.todoRoutes")
             }
             slices.forEach { (s, _) -> appendLine("import ${slicePkg(c, s)}.server.${s}Routes") }
-            if (flyway) FlywayGenerator.applicationImports(c).forEach(::appendLine)
+            if (hasFlyway) {
+                FlywayGenerator
+                    .applicationImports(c)
+                    .forEach(::appendLine)
+            }
             appendLine("\n/** Port, host and modules come from src/main/resources/application.conf. */")
             appendLine("fun main(args: Array<String>) = EngineMain.main(args)\n")
             appendLine("fun Application.module() {")
             appendLine("    install(ContentNegotiation) { json() }")
-            if (flyway) FlywayGenerator.applicationStartup.forEach { appendLine("    $it") }
-            if (c.todo) {
+            if (hasFlyway) FlywayGenerator.applicationStartup.forEach { appendLine("    $it") }
+            if (c.hasTodo) {
                 appendLine("    // The web app is served from another port, so browsers need CORS to call this API.")
                 appendLine("    install(CORS) {")
                 appendLine("        anyHost()")
@@ -690,12 +813,12 @@ class ProjectGenerator {
             appendLine("    routing {")
             appendLine("        get(\"/\") { call.respondText(\"${c.slug} server is running\") }")
             slices.forEach { (s, _) -> appendLine("        ${s}Routes()") }
-            if (c.todo) appendLine("        todoRoutes(todos)")
+            if (c.hasTodo) appendLine("        todoRoutes(todos)")
             appendLine("    }")
             appendLine("}")
         }
-        if (c.todo) todoServer(c, f)
-        if (flyway) FlywayGenerator.files(c, f)
+        if (c.hasTodo) todoServer(c, f)
+        if (hasFlyway) FlywayGenerator.files(c, f)
         f["server/src/main/resources/application.conf"] = ("""
             ktor {
                 deployment {
@@ -708,14 +831,14 @@ class ProjectGenerator {
                     modules = [ $sp.ApplicationKt.module ]
                 }
             }
-        """.trimIndent() + if (c.todo) "\n" + """
+        """.trimIndent() + if (c.hasTodo) "\n" + """
             mongo {
                 uri = "mongodb://localhost:27017"
                 uri = ${'$'}{?MONGODB_URI}
                 database = "${c.slug.replace('-', '_')}"
                 database = ${'$'}{?MONGODB_DATABASE}
             }
-        """.trimIndent() else "") + if (flyway) "\n" + FlywayGenerator.config(c) else ""
+        """.trimIndent() else "") + if (hasFlyway) "\n" + FlywayGenerator.config(c) else ""
         f["server/src/main/resources/logback.xml"] = """
             <configuration>
                 <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
@@ -725,11 +848,12 @@ class ProjectGenerator {
                 <logger name="io.netty" level="WARN" />
                 __MONGO_LOGGER__
             </configuration>
-        """.trimIndent().replace(
-            "    __MONGO_LOGGER__\n",
-            // The driver logs every failed background connection attempt with a stack trace; Application logs one line.
-            if (c.todo) "    <logger name=\"org.mongodb.driver\" level=\"WARN\" />\n" else "",
-        )
+        """.trimIndent()
+            .replace(
+                "    __MONGO_LOGGER__\n"
+                // The driver logs every failed background connection attempt with a stack trace; Application logs one.
+                , if (c.hasTodo) "    <logger name=\"org.mongodb.driver\" level=\"WARN\" />\n" else ""
+            )
         f["server/src/test/kotlin/$sd/ApplicationTest.kt"] = buildString {
             appendLine("package $sp\n")
             appendLine("import io.ktor.client.request.get")
@@ -738,8 +862,12 @@ class ProjectGenerator {
             appendLine("import io.ktor.server.testing.testApplication")
             appendLine("import kotlin.test.Test")
             appendLine("import kotlin.test.assertEquals")
-            if (flyway) FlywayGenerator.testImports(c).forEach(::appendLine)
-            val config = if (flyway) FlywayGenerator.TEST_CONFIG else "ApplicationConfig(\"application.conf\")"
+            if (hasFlyway) {
+                FlywayGenerator
+                    .testImports(c)
+                    .forEach(::appendLine)
+            }
+            val config = if (hasFlyway) FlywayGenerator.TEST_CONFIG else "ApplicationConfig(\"application.conf\")"
             appendLine("\nclass ApplicationTest {")
             appendLine("    @Test fun root() = testApplication {")
             appendLine("        environment { config = $config }")
@@ -754,5 +882,4 @@ class ProjectGenerator {
             appendLine("}")
         }
     }
-
 }

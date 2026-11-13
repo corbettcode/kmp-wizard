@@ -10,21 +10,30 @@ import kmpwizard.generator.slicePkg
 // ---------- Todo sample: clients -> HTTP -> server -> MongoDB, sharing domain + DTOs via core ----------
 
 /** Result type the Todo use cases return, depending on whether Arrow is selected. */
-private fun todoResult(c: ProjectContext, t: String) = if (c.lib("arrow")) "Either<DomainError, $t>" else "Result<$t>"
+private fun todoResult(
+    c: ProjectContext
+    , t: String
+) = if (c.lib("arrow")) "Either<DomainError, $t>" else "Result<$t>"
 
-private fun todoResultImports(c: ProjectContext) =
-    if (c.lib("arrow")) "import arrow.core.Either\nimport ${c.pkg}.core.DomainError\n" else ""
+private fun todoResultImports(
+    c: ProjectContext
+) = if (c.lib("arrow")) "import arrow.core.Either\nimport ${c.pkg}.core.DomainError\n" else ""
 
-fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
+fun todoSample(
+    c: ProjectContext
+    , f: MutableMap<String, String>
+) {
     val s = TODO_SLICE
     val p = slicePkg(c, s)
     // Every layer of the slice lives in one package, across feature/todo/shared, client and server.
     val b = featureSrc(c, s, "commonMain")
     // Client-only code (Compose, Ktor client) goes in feature/todo/client; the server never depends on it.
     val ub = featureSrc(c, s, "clientMain")
-    val arrow = c.lib("arrow")
+    val hasArrow = c.lib("arrow")
     val imports = todoResultImports(c)
-    fun r(t: String) = todoResult(c, t)
+    fun r(
+        t: String
+    ) = todoResult(c, t)
 
     // Where clients find the server. The Android emulator reaches the host machine at 10.0.2.2.
     val core = "core/src/%s/kotlin/${c.dir}/core"
@@ -35,7 +44,9 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
             expect val defaultServerUrl: String
         """.trimIndent()
     listOf("androidMain" to "android", "iosMain" to "ios", "jvmMain" to "jvm", "webMain" to "web")
-        .filter { c.setActive(it.first) }
+        .filter {
+            c.isSetActive(it.first)
+        }
         .forEach { (set, name) ->
             val host = if (set == "androidMain") "10.0.2.2" else "localhost"
             f["${core.format(set)}/ServerUrl.$name.kt"] =
@@ -43,7 +54,8 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
         }
 
     // ----- domain -----
-    f["$b/domain/Todo.kt"] = "package $p.domain\n\ndata class Todo(val id: TodoId, val title: String, val done: Boolean)\n"
+    f["$b/domain/Todo.kt"] =
+        "package $p.domain\n\ndata class Todo(val id: TodoId, val title: String, val done: Boolean)\n"
     f["$b/domain/TodoId.kt"] = """
             @file:OptIn(ExperimentalUuidApi::class)
 
@@ -85,7 +97,7 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
                 suspend fun delete(id: TodoId): Boolean
             }
         """.trimIndent()
-    f["$b/domain/Attempt.kt"] = if (arrow) """
+    f["$b/domain/Attempt.kt"] = if (hasArrow) """
             package $p.domain
 
             import arrow.core.Either
@@ -136,7 +148,9 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
                     if (!repository.delete(id)) throw NoSuchElementException("No todo with id ${'$'}id")
                 }
             }
-        """.trimIndent().replace("__IMPORTS__\n", imports).replace("\n\n\n", "\n\n")
+        """.trimIndent()
+        .replace("__IMPORTS__\n", imports)
+        .replace("\n\n\n", "\n\n")
 
     // ----- data: wire format shared with the server, plus the HTTP client adapter -----
     f["$b/data/TodoDtos.kt"] = """
@@ -292,8 +306,9 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
     if (!c.hasUi) return
 
     // ----- presentation: TodoViewModel (from Koin) holds the state, TodoScreen renders it -----
-    val report = if (arrow) "fold({ report(it.message); null }, { report(null); it })"
-    else "fold(onSuccess = { report(null); it }, onFailure = { report(it.message ?: \"error\"); null })"
+    val report =
+        if (hasArrow) "fold({ report(it.message); null }, { report(null); it })"
+        else "fold(onSuccess = { report(null); it }, onFailure = { report(it.message ?: \"error\"); null })"
     f["$ub/presentation/TodoViewModel.kt"] = """
             package $p.presentation
 
@@ -377,7 +392,8 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
                 /** Shows a failure and returns null, or clears the error and returns the value. */
                 private fun <T> ${r("T")}.orReport(): T? = $report
             }
-        """.trimIndent().replace("__IMPORTS__\n", imports)
+        """.trimIndent()
+        .replace("__IMPORTS__\n", imports)
     f["$ub/presentation/TodoScreen.kt"] = """
             package $p.presentation
 
@@ -477,12 +493,15 @@ fun todoSample(c: ProjectContext, f: MutableMap<String, String>) {
 }
 
 /** Server side of the Todo sample: MongoDB adapter + HTTP routes. */
-fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
+fun todoServer(
+    c: ProjectContext
+    , f: MutableMap<String, String>
+) {
     val s = TODO_SLICE
     val p = slicePkg(c, s)
     val tp = "$p.server"
     val td = "${featureSrc(c, s, "serverMain")}/server"
-    val arrow = c.lib("arrow")
+    val hasArrow = c.lib("arrow")
     f["$td/MongoTodoRepository.kt"] = """
             package $tp
 
@@ -529,9 +548,11 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
             private fun Document.toTodo() = Todo(TodoId.parse(getString("_id")), getString("title"), getBoolean("done", false))
         """.trimIndent()
 
-    fun fold(ok: String) = if (arrow) "fold({ call.respondError(it) }, { $ok })"
+    fun fold(
+        ok: String
+    ) = if (hasArrow) "fold({ call.respondError(it) }, { $ok })"
     else "fold(onSuccess = { $ok }, onFailure = { call.respondError(it) })"
-    val respondError = if (arrow) """
+    val respondError = if (hasArrow) """
             private suspend fun ApplicationCall.respondError(error: DomainError) = when (error) {
                 is DomainError.Invalid -> respond(HttpStatusCode.BadRequest, error.message)
                 is DomainError.NotFound -> respond(HttpStatusCode.NotFound, error.message)
@@ -557,7 +578,7 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
             import io.ktor.server.routing.patch
             import io.ktor.server.routing.post
             import io.ktor.server.routing.route
-            ${if (arrow) "import ${c.pkg}.core.DomainError" else ""}
+            ${if (hasArrow) "import ${c.pkg}.core.DomainError" else ""}
             import $p.data.NewTodoDto
             import $p.data.TodoPatchDto
             import $p.data.toDto
@@ -605,6 +626,8 @@ fun todoServer(c: ProjectContext, f: MutableMap<String, String>) {
                 respond(HttpStatusCode.BadRequest, "Todo id must be a UUID")
 
             __RESPOND_ERROR__
-        """.trimIndent().replace("\n\n\n", "\n\n").replace("route\n\n", "route\n")
+        """.trimIndent()
+        .replace("\n\n\n", "\n\n")
+        .replace("route\n\n", "route\n")
         .replace("__RESPOND_ERROR__", respondError) + "\n"
 }

@@ -8,27 +8,31 @@ import kmpwizard.Target
  * Gives a module a unique Maven group and Kotlin module / archive [name], for modules whose project
  * name repeats in the build (every slice has `shared`, `client` and `server`).
  */
-class ModuleIdentity(val group: String, val name: String) {
-    val comment = "// Every slice has shared/client/server modules: a unique group and name keep their jars and Kotlin modules apart."
+class ModuleIdentity(
+    val group: String
+    , val name: String
+) {
+    val comment = "// Every slice has shared/client/server modules: " +
+        "a unique group and name keep their jars and Kotlin modules apart."
 }
 
 fun kmpBuildScript(
-    c: ProjectContext,
-    namespace: String,
-    compose: Boolean,
-    jvm: Boolean,
-    iosFramework: String?,
-    plugins: List<String>,
-    deps: Map<String, List<String>>,
-    junit: Boolean = false,
-    identity: ModuleIdentity? = null,
+    c: ProjectContext
+    , namespace: String
+    , hasCompose: Boolean
+    , hasJvm: Boolean
+    , iosFramework: String?
+    , plugins: List<String>
+    , deps: Map<String, List<String>>
+    , usesJUnit: Boolean = false
+    , identity: ModuleIdentity? = null
 ) = buildString {
     if (c.has(kmpwizard.Target.ANDROID)) appendLine("import org.jetbrains.kotlin.gradle.dsl.JvmTarget")
     if (c.has(kmpwizard.Target.WEB)) appendLine("import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl")
     appendLine("\nplugins {")
     appendLine("    alias(libs.plugins.kotlinMultiplatform)")
     if (c.has(kmpwizard.Target.ANDROID)) appendLine("    alias(libs.plugins.androidMultiplatformLibrary)")
-    if (compose) {
+    if (hasCompose) {
         appendLine("    alias(libs.plugins.composeMultiplatform)")
         appendLine("    alias(libs.plugins.composeCompiler)")
     }
@@ -62,7 +66,7 @@ fun kmpBuildScript(
             appendLine("    iosSimulatorArm64()")
         }
     }
-    if (jvm) appendLine("    jvm()")
+    if (hasJvm) appendLine("    jvm()")
     if (c.has(Target.WEB)) {
         appendLine("    js { browser() }")
         appendLine("    @OptIn(ExperimentalWasmDsl::class)")
@@ -75,12 +79,17 @@ fun kmpBuildScript(
         appendLine("        }")
     }
     appendLine("    }\n}")
-    if (junit) appendLine("\ntasks.withType<Test>().configureEach { useJUnitPlatform() }")
+    if (usesJUnit) appendLine("\ntasks.withType<Test>().configureEach { useJUnitPlatform() }")
     // Compose hooks a check onto every web browser test task that fails unless the target is an executable
     // (CMP-4906), even when the module has no tests, which breaks `./gradlew allTests`.
-    if (compose && c.has(Target.WEB) && deps.keys.none { it.endsWith("Test") }) {
-        appendLine("\n// No tests here yet. Compose's web UI-test check (CMP-4906) needs an executable target and would fail")
+    if (hasCompose && c.has(Target.WEB) && deps.keys.none { it.endsWith("Test") }) {
+        appendLine(
+            "\n// No tests here yet. Compose's web UI-test check (CMP-4906) needs an executable target and would fail"
+        )
         appendLine("// `allTests`; remove this when adding Compose UI tests, and bundle them as that check describes.")
-        appendLine("tasks.matching { it.name.startsWith(\"checkComposeUiTestConfigurationFor\") }.configureEach { enabled = false }")
+        appendLine(
+            "tasks.matching { it.name.startsWith(\"checkComposeUiTestConfigurationFor\") }" +
+                ".configureEach { enabled = false }"
+        )
     }
 }

@@ -14,24 +14,32 @@ object FlywayGenerator {
     const val ID = "flyway"
 
     /** Database name, user and password used by docker-compose and the default JDBC URL. */
-    private fun dbName(c: ProjectContext) = c.slug.replace('-', '_')
+    private fun dbName(
+        c: ProjectContext
+    ) = c.slug.replace('-', '_')
+
     private const val DB_USER = "app"
     private const val DB_PASSWORD = "app"
     private const val DB_PORT = 5432
 
     /** H2 in PostgreSQL mode, so server tests run the real migrations without Docker. */
-    private fun h2Url(name: String) =
-        "jdbc:h2:mem:$name;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
+    private fun h2Url(
+        name: String
+    ) = "jdbc:h2:mem:$name;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1"
 
     /** Entries for `[versions]` in libs.versions.toml. */
-    fun versions(v: MutableMap<String, String>) {
+    fun versions(
+        v: MutableMap<String, String>
+    ) {
         v["flyway"] = FLYWAY
         v["postgresql"] = POSTGRESQL_JDBC
         v["h2"] = H2
     }
 
     /** Entries for `[libraries]`: alias, module, version ref. */
-    fun libraries(lib: (alias: String, module: String, ref: String) -> Unit) {
+    fun libraries(
+        lib: (alias: String, module: String, ref: String) -> Unit
+    ) {
         lib("flyway-core", "org.flywaydb:flyway-core", "flyway")
         lib("flyway-database-postgresql", "org.flywaydb:flyway-database-postgresql", "flyway")
         lib("postgresql", "org.postgresql:postgresql", "postgresql")
@@ -40,14 +48,16 @@ object FlywayGenerator {
 
     /** Lines for the `dependencies {}` block of server/build.gradle.kts (no leading indent). */
     val serverDependencies = listOf(
-        "implementation(libs.flyway.core)",
-        "runtimeOnly(libs.flyway.database.postgresql)",
-        "runtimeOnly(libs.postgresql)",
-        "testRuntimeOnly(libs.h2)",
+        "implementation(libs.flyway.core)"
+        , "runtimeOnly(libs.flyway.database.postgresql)"
+        , "runtimeOnly(libs.postgresql)"
+        , "testRuntimeOnly(libs.h2)"
     )
 
     /** A `services:` entry and its `volumes:` entry for docker-compose.yml. */
-    fun dockerService(c: ProjectContext) = """
+    fun dockerService(
+        c: ProjectContext
+    ) = """
         postgres:
           image: postgres:18
           environment:
@@ -60,19 +70,23 @@ object FlywayGenerator {
             - postgres-data:/var/lib/postgresql
     """.trimIndent() to "postgres-data:"
 
-    fun applicationImports(c: ProjectContext) = listOf(
-        "import ${c.appPkg("server")}.db.DatabaseConfig",
-        "import ${c.appPkg("server")}.db.migrate",
+    fun applicationImports(
+        c: ProjectContext
+    ) = listOf(
+        "import ${c.appPkg("server")}.db.DatabaseConfig"
+        , "import ${c.appPkg("server")}.db.migrate"
     )
 
     /** Statements for `Application.module()`, run before routing is set up (no leading indent). */
     val applicationStartup = listOf(
-        "// Brings the SQL schema up to date before serving requests; startup fails if the database is unreachable.",
-        "migrate(DatabaseConfig.from(environment.config.config(\"database\")))",
+        "// Brings the SQL schema up to date before serving requests; startup fails if the database is unreachable."
+        , "migrate(DatabaseConfig.from(environment.config.config(\"database\")))"
     )
 
     /** `database {}` block appended to application.conf. */
-    fun config(c: ProjectContext) = """
+    fun config(
+        c: ProjectContext
+    ) = """
         database {
             url = "jdbc:postgresql://localhost:$DB_PORT/${dbName(c)}"
             url = ${'$'}{?DATABASE_URL}
@@ -86,21 +100,42 @@ object FlywayGenerator {
     /** Expression for the test config of ApplicationTest: application.conf with the database swapped for H2. */
     const val TEST_CONFIG = "ApplicationConfig(\"application.conf\").withTestDatabase()"
 
-    fun testImports(c: ProjectContext) = listOf("import ${c.appPkg("server")}.db.withTestDatabase")
+    fun testImports(
+        c: ProjectContext
+    ) = listOf("import ${c.appPkg("server")}.db.withTestDatabase")
 
-    fun readme(c: ProjectContext) = buildString {
+    fun readme(
+        c: ProjectContext
+    ) = buildString {
         appendLine("\n## Database (Flyway)")
-        appendLine("The server keeps its SQL schema in versioned migrations under `server/src/main/resources/db/migration`.")
-        appendLine("On startup it runs [Flyway](https://documentation.red-gate.com/flyway), which applies any pending ones to PostgreSQL.\n")
-        appendLine("1. Start PostgreSQL: `docker compose up -d postgres` (or point `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD` at your own).")
+        appendLine(
+            "The server keeps its SQL schema in versioned migrations under `server/src/main/resources/db/migration`."
+        )
+        appendLine(
+            "On startup it runs [Flyway](https://documentation.red-gate.com/flyway), " +
+                "which applies any pending ones to PostgreSQL.\n"
+        )
+        appendLine(
+            "1. Start PostgreSQL: `docker compose up -d postgres` " +
+                "(or point `DATABASE_URL`, `DATABASE_USER`, `DATABASE_PASSWORD` at your own)."
+        )
         appendLine("2. Start the server: `./gradlew :server:run`. The log shows which migrations were applied.")
-        appendLine("3. To change the schema, add a new file such as `V2__add_column.sql`. Never edit a migration that has already run.\n")
-        appendLine("Server tests run the same migrations against an in-memory H2 database in PostgreSQL mode, so they need no Docker.")
+        appendLine(
+            "3. To change the schema, add a new file such as `V2__add_column.sql`. " +
+                "Never edit a migration that has already run.\n"
+        )
+        appendLine(
+            "Server tests run the same migrations against an in-memory H2 database in PostgreSQL mode, " +
+                "so they need no Docker."
+        )
         appendLine("Connection settings live in the `database` block of `server/src/main/resources/application.conf`.")
     }
 
     /** Server source, the first migration and tests. */
-    fun files(c: ProjectContext, f: MutableMap<String, String>) {
+    fun files(
+        c: ProjectContext
+        , f: MutableMap<String, String>
+    ) {
         val sp = c.appPkg("server")
         val sd = c.appDir("server")
         f["server/src/main/kotlin/$sd/db/Migrations.kt"] = """

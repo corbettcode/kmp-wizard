@@ -6,11 +6,19 @@ import kmpwizard.TODO_SLICE
 import kmpwizard.Target
 import kmpwizard.slug
 
+/** [isApi] = true when the library's types appear in core's public API (e.g. use case return types). */
+class Art(
+    val alias: String
+    , val module: String
+    , val sets: List<String>
+    , val isApi: Boolean = false
+)
 
-/** [api] = true when the library's types appear in core's public API (e.g. use case return types). */
-class Art(val alias: String, val module: String, val sets: List<String>, val api: Boolean = false)
-
-class Plug(val alias: String, val id: String, val versionRef: String)
+class Plug(
+    val alias: String
+    , val id: String
+    , val versionRef: String
+)
 
 // Desktop and Server share core's single `jvm()` target.
 val jvmTargets = setOf(Target.DESKTOP, Target.SERVER)
@@ -20,13 +28,12 @@ val uiTargets = setOf(Target.ANDROID, Target.IOS, Target.DESKTOP, Target.WEB)
 
 /** Source sets that only exist when one of these targets is selected. */
 val setTargets = mapOf(
-    "androidMain" to setOf(Target.ANDROID),
-    "iosMain" to setOf(Target.IOS),
-    "jvmMain" to jvmTargets,
-    "jvmTest" to jvmTargets,
-    "webMain" to setOf(Target.WEB),
+    "androidMain" to setOf(Target.ANDROID)
+    , "iosMain" to setOf(Target.IOS)
+    , "jvmMain" to jvmTargets
+    , "jvmTest" to jvmTargets
+    , "webMain" to setOf(Target.WEB)
 )
-
 
 /**
  * Describes a library entry used to group related dependency artifacts, plugin definitions,
@@ -45,26 +52,30 @@ val wiring = mapOf(
     "arrow" to Library(
         "arrow"
         , "2.3.0.1"
-        , listOf(Art(
-            "arrow-core"
-            , "io.arrow-kt:arrow-core"
-            , listOf(
-                "commonMain"
+        , listOf(
+            Art(
+                "arrow-core"
+                , "io.arrow-kt:arrow-core"
+                , listOf(
+                    "commonMain"
+                )
+                , isApi = true
             )
-            , api = true
-        ) )
+        )
     )
 
     , "datetime" to Library(
         "datetime"
         , "0.8.0"
-        , listOf(Art(
-            "datetime"
-            , "org.jetbrains.kotlinx:kotlinx-datetime"
-            , listOf(
-                "commonMain"
+        , listOf(
+            Art(
+                "datetime"
+                , "org.jetbrains.kotlinx:kotlinx-datetime"
+                , listOf(
+                    "commonMain"
+                )
             )
-        ))
+        )
     )
 
     , "kermit" to Library(
@@ -74,7 +85,9 @@ val wiring = mapOf(
             Art(
                 "kermit"
                 , "co.touchlab:kermit"
-                , listOf("commonMain")
+                , listOf(
+                    "commonMain"
+                )
             )
         )
     )
@@ -91,7 +104,7 @@ val wiring = mapOf(
             , Art("koin-compose", "io.insert-koin:koin-compose", emptyList())
             , Art("koin-composeNavigation3", "io.insert-koin:koin-compose-navigation3", emptyList())
             , Art("koin-composeViewmodel", "io.insert-koin:koin-compose-viewmodel", emptyList())
-            , Art("koin-core", "io.insert-koin:koin-core", listOf("commonMain"), api = true)
+            , Art("koin-core", "io.insert-koin:koin-core", listOf("commonMain"), isApi = true)
             , Art("koin-coreViewmodel", "io.insert-koin:koin-core-viewmodel", emptyList())
         )
     )
@@ -122,7 +135,10 @@ val wiring = mapOf(
                 )
             )
         )
-        , plugins = listOf(Plug("kotest", "io.kotest", "kotest"), Plug("ksp", "com.google.devtools.ksp", "ksp"))
+        , plugins = listOf(
+            Plug("kotest", "io.kotest", "kotest")
+            , Plug("ksp", "com.google.devtools.ksp", "ksp")
+        )
         , extraVersions = mapOf("ksp" to "2.3.13")
     )
 
@@ -202,46 +218,102 @@ val wiring = mapOf(
     , "turbine" to Library(
         "turbine"
         , "1.2.1"
-        , listOf(Art(
-            "turbine"
-            , "app.cash.turbine:turbine"
-            , listOf(
-                "commonTest")
-        ))
+        , listOf(
+            Art(
+                "turbine"
+                , "app.cash.turbine:turbine"
+                , listOf(
+                    "commonTest"
+                )
+            )
+        )
     )
 )
 
-
-class ProjectContext(val spec: ProjectSpecification) {
+class ProjectContext(
+    val spec: ProjectSpecification
+) {
     val pkg = spec.packageName
     val dir = pkg.replace('.', '/')
+
     /** Platform entry points live in `<pkg>.app.<platform>`. */
-    fun appPkg(platform: String) = "$pkg.app.$platform"
-    fun appDir(platform: String) = "$dir/app/$platform"
+    fun appPkg(
+        platform: String
+    ) = "$pkg.app.$platform"
+
+    fun appDir(
+        platform: String
+    ) = "$dir/app/$platform"
+
     val slug = spec.slug()
-    fun has(t: kmpwizard.Target) = t in spec.targets
+
+    fun has(
+        t: kmpwizard.Target
+    ) = t in spec.targets
+
     val hasJvm get() = spec.targets.any { it in jvmTargets }
     val hasUi get() = spec.targets.any { it in uiTargets }
-    val todo get() = spec.sampleTodo
+    val hasTodo get() = spec.sampleTodo
+
     /** The Todo sample needs Ktor and kotlinx.serialization (HTTP client) and Koin (wiring, ViewModel). */
     val libIds: Set<String> = spec.libraries + if (spec.sampleTodo) TODO_LIBRARIES else emptySet()
-    fun lib(id: String) = id in libIds
-    val activeLibs = libIds.sorted().mapNotNull { wiring[it] }
+
+    fun lib(
+        id: String
+    ) = id in libIds
+
+    val activeLibs = libIds
+        .sorted()
+        .mapNotNull {
+            wiring[it]
+        }
+
     /** User slices plus the Todo sample's slice, in tab order. */
     val allSlices get() = spec.slices + if (spec.sampleTodo) listOf(TODO_SLICE) else emptyList()
-    fun setActive(set: String) = setTargets[set]?.let { ts -> ts.any(::has) } ?: true
+
+    fun isSetActive(
+        set: String
+    ) = setTargets[set]
+        ?.let { ts ->
+            ts.any(::has)
+        }
+        ?: true
+
     /** Gradle plugins applied somewhere in the project, keyed by catalog alias. */
     val plugins: Map<String, Plug> = buildMap {
         if (has(Target.SERVER))
-            put("kotlinSerialization", Plug("kotlinSerialization", "org.jetbrains.kotlin.plugin.serialization", "kotlin"))
-        activeLibs.flatMap { it.plugins }.forEach { put(it.alias, it) }
+            put(
+                "kotlinSerialization"
+                , Plug("kotlinSerialization", "org.jetbrains.kotlin.plugin.serialization", "kotlin")
+            )
+        activeLibs
+            .flatMap {
+                it.plugins
+            }
+            .forEach {
+                put(it.alias, it)
+            }
     }
+
     /** Plugins from selected libraries, applied to core. */
-    val corePlugins = activeLibs.flatMap { it.plugins }.map { it.alias }.distinct()
+    val corePlugins = activeLibs
+        .flatMap {
+            it.plugins
+        }
+        .map {
+            it.alias
+        }
+        .distinct()
+
     /** Selected libraries as (source set, dependency declaration) for core and every slice's shared module. */
     fun libraryDependencies(): List<Pair<String, String>> = activeLibs.flatMap { l ->
         l.arts.flatMap { a ->
-            a.sets.filter(::setActive).map { it to "${if (a.api) "api" else "implementation"}(libs.${a.alias.replace('-', '.')})" }
+            val configuration = if (a.isApi) "api" else "implementation"
+            a.sets
+                .filter(::isSetActive)
+                .map {
+                    it to "$configuration(libs.${a.alias.replace('-', '.')})"
+                }
         }
     }
 }

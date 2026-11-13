@@ -15,12 +15,23 @@ import org.jetbrains.compose.web.css.*
 val BORDER_COLOR = Color.rgb(0xea, 0xea, 0xea)
 
 @InitSilk
-fun initSiteStyles(ctx: InitSilkContext) = ctx.stylesheet.apply {
+fun initSiteStyles(
+    ctx: InitSilkContext
+) = ctx.stylesheet.apply {
     registerStyleBase("html, body") { Modifier.fillMaxHeight() }
     registerStyleBase("body") {
         Modifier.fontFamily(
-            "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
-            "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", "sans-serif"
+            "-apple-system"
+            , "BlinkMacSystemFont"
+            , "Segoe UI"
+            , "Roboto"
+            , "Oxygen"
+            , "Ubuntu"
+            , "Cantarell"
+            , "Fira Sans"
+            , "Droid Sans"
+            , "Helvetica Neue"
+            , "sans-serif"
         )
     }
 
@@ -38,7 +49,9 @@ fun initSiteStyles(ctx: InitSilkContext) = ctx.stylesheet.apply {
 
 @App
 @Composable
-fun AppEntry(content: @Composable () -> Unit) {
+fun AppEntry(
+    content: @Composable () -> Unit
+) {
     SilkApp {
         Surface(Modifier.fillMaxHeight()) {
             content()

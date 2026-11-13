@@ -67,7 +67,7 @@ fun featureModulePaths(
 fun sliceKoinModules(
     c: ProjectContext
 ): List<Pair<String, String>> =
-    if (c.lib("koin") && c.todo && c.hasUi) listOf(TODO_SLICE to "${TODO_SLICE}Module")
+    if (c.lib("koin") && c.hasTodo && c.hasUi) listOf(TODO_SLICE to "${TODO_SLICE}Module")
     else emptyList()
 
 /** Kotlin accessor of a slice module, e.g. `projects.feature.todo.client`. */
@@ -116,8 +116,8 @@ private fun coreUiModule(
     f["coreUI/build.gradle.kts"] = kmpBuildScript(
         c
         , namespace = coreUiPkg(c)
-        , compose = true
-        , jvm = c.has(Target.DESKTOP)
+        , hasCompose = true
+        , hasJvm = c.has(Target.DESKTOP)
         , iosFramework = null
         , plugins = emptyList()
         , deps = deps
@@ -146,23 +146,28 @@ private fun sliceShared(
         set: String
         , d: String
     ) = deps
-        .getOrPut(set) { mutableListOf() }
+        .getOrPut(set) {
+            mutableListOf()
+        }
         .add(d)
     add("commonMain", "api(projects.core)")
     add("commonTest", "implementation(kotlin(\"test\"))")
     add("commonTest", "implementation(libs.coroutines.test)")
-    c.libraryDependencies().forEach { (set, d) -> add(set, d) }
+    c.libraryDependencies()
+        .forEach { (set, d) ->
+            add(set, d)
+        }
     // The Todo sample's wire DTOs are @Serializable and shared by the HTTP client and the server.
     if (s == TODO_SLICE) add("commonMain", "implementation(libs.ktor.serialization.kotlinx.json)")
     f["${sliceModuleDir(s, "shared")}/build.gradle.kts"] = kmpBuildScript(
         c
         , namespace = "${slicePkg(c, s)}.shared"
-        , compose = false
-        , jvm = c.hasJvm
+        , hasCompose = false
+        , hasJvm = c.hasJvm
         , iosFramework = null
         , plugins = c.corePlugins
         , deps = deps
-        , junit = c.lib("kotest")
+        , usesJUnit = c.lib("kotest")
         , identity = sliceIdentity(c, s, "shared")
     )
 }
@@ -195,8 +200,8 @@ private fun sliceClient(
     f["${sliceModuleDir(s, "client")}/build.gradle.kts"] = kmpBuildScript(
         c
         , namespace = "${slicePkg(c, s)}.client"
-        , compose = true
-        , jvm = c.has(Target.DESKTOP)
+        , hasCompose = true
+        , hasJvm = c.has(Target.DESKTOP)
         , iosFramework = null
         , plugins = if (isTodo) listOf("kotlinSerialization") else emptyList()
         , deps = deps

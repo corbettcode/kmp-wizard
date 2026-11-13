@@ -17,7 +17,10 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
     inputs.property("version", appVersion)
     outputs.dir(outDir)
     doLast {
-        val file = outDir.get().file("kmpwizard/BuildInfo.kt").asFile
+        val file = outDir
+            .get()
+            .file("kmpwizard/BuildInfo.kt")
+            .asFile
         file.parentFile.mkdirs()
         file.writeText("package kmpwizard\n\nconst val APP_VERSION = \"$appVersion\"\n")
     }
