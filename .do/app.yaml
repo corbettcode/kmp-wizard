@@ -16,8 +16,9 @@ services:
     # 512 MB is enough: idle ~140 MB, ~370 MB peak under 20 concurrent generate requests.
     instance_size_slug: apps-s-1vcpu-0.5gb
     instance_count: 1
+    # An API route, not a static page: it only answers once the server-side API jar is loaded.
     health_check:
-      http_path: /
+      http_path: /api/health
       initial_delay_seconds: 20
 ingress:
   rules:

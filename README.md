@@ -38,6 +38,15 @@ docker run --rm -p 8080:8080 kmp-wizard
 The build takes a few minutes: the export renders each page in headless Chromium, which Kobweb downloads during the
 build.
 
+Before pushing to `master` (which deploys), smoke-test the image:
+
+```bash
+scripts/smoke-test.sh               # build, run, check; SKIP_BUILD=1 reuses an existing kmp-wizard image
+```
+
+It starts the container, waits for `GET /api/health`, then checks that `/` serves the site, `POST /api/generate`
+returns a project ZIP and a malformed spec gets a 400. On failure it prints the container's logs.
+
 ## Deploy to DigitalOcean App Platform
 
 `.do/app.yaml` describes the app: one 512 MB instance built from the `Dockerfile` on `master`, serving port 8080 and
