@@ -29,24 +29,24 @@ fun coreUiPkg(
 
 /** Directory of one slice module: `feature/<slice>/shared|client|server`. */
 private fun sliceModuleDir(
-    s: String
+    slice: String
     , module: String
-) = "feature/$s/$module"
+) = "feature/$slice/$module"
 
 /**
- * Source root, down to the slice's package, for one part of slice [s]:
+ * Source root, down to the slice's package, for one part of slice [slice]:
  * `commonMain` / `commonTest` (shared module), `clientMain` (client module), `serverMain` (server module).
  */
 fun featureSrc(
     c: ProjectContext
-    , s: String
+    , slice: String
     , part: String
 ) = when (part) {
-    "commonMain", "commonTest" -> "${sliceModuleDir(s, "shared")}/src/$part"
-    "clientMain" -> "${sliceModuleDir(s, "client")}/src/commonMain"
-    "serverMain" -> "${sliceModuleDir(s, "server")}/src/main"
+    "commonMain", "commonTest" -> "${sliceModuleDir(slice, "shared")}/src/$part"
+    "clientMain" -> "${sliceModuleDir(slice, "client")}/src/commonMain"
+    "serverMain" -> "${sliceModuleDir(slice, "server")}/src/main"
     else -> error("Unknown feature part: $part")
-} + "/kotlin/${c.dir}/$s"
+} + "/kotlin/${c.dir}/$slice"
 
 /** Gradle project paths of every slice's modules, plus coreUI when there is a UI. */
 fun featureModulePaths(

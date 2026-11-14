@@ -6,7 +6,15 @@ import kmpwizard.TODO_SLICE
 import kmpwizard.Target
 import kmpwizard.slug
 
-/** [isApi] = true when the library's types appear in core's public API (e.g. use case return types). */
+/**
+ *  [isApi] = true when the library's types appear in core's public API (e.g. use case return types).
+ *
+ * Describes a generated Gradle dependency artifact used by the project generator.
+ *
+ * An artifact identifies the dependency alias to use, the Gradle module that receives it,
+ * the source sets where it is applied, and whether it is added to the API surface or kept
+ * as an implementation detail.
+ */
 class Art(
     val alias: String
     , val module: String
@@ -64,12 +72,12 @@ val wiring = mapOf(
         )
     )
 
-    , "datetime" to Library(
-        "datetime"
+    , "kotlinx-datetime" to Library(
+        "kotlinx-datetime"
         , "0.8.0"
         , listOf(
             Art(
-                "datetime"
+                "kotlinx-datetime"
                 , "org.jetbrains.kotlinx:kotlinx-datetime"
                 , listOf(
                     "commonMain"
